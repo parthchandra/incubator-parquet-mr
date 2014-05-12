@@ -328,7 +328,7 @@ public final class PrimitiveType extends Type {
    * @param originalType (optional) the original type (MAP, DECIMAL, UTF8, ...)
    * @param decimalMeta (optional) metadata about the decimal type
    */
-  PrimitiveType(Repetition repetition, PrimitiveTypeName primitive,
+  public PrimitiveType(Repetition repetition, PrimitiveTypeName primitive,
                        int length, String name, OriginalType originalType,
                        DecimalMetadata decimalMeta) {
     super(name, repetition, originalType);
