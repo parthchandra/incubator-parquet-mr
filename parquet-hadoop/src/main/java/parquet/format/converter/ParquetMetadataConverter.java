@@ -312,6 +312,18 @@ public class ParquetMetadataConverter {
         return OriginalType.ENUM;
       case DECIMAL:
         return OriginalType.DECIMAL;
+      case DATE:
+        return OriginalType.DATE;
+      case TIME:
+        return OriginalType.TIME;
+      case FINETIME:
+        return OriginalType.FINETIME;
+      case TIMESTAMP:
+        return OriginalType.TIMESTAMP;
+      case TIMESTAMPTZ:
+        return OriginalType.TIMESTAMPTZ;
+      case INTERVAL:
+        return OriginalType.INTERVAL;
       default:
         throw new RuntimeException("Unknown converted type " + type);
     }
@@ -331,7 +343,19 @@ public class ParquetMetadataConverter {
         return ConvertedType.ENUM;
       case DECIMAL:
         return ConvertedType.DECIMAL;
-      default:
+      case DATE:
+        return ConvertedType.DATE;
+      case TIME:
+        return ConvertedType.TIME;
+      case FINETIME:
+        return ConvertedType.FINETIME;
+      case TIMESTAMP:
+        return ConvertedType.TIMESTAMP;
+      case TIMESTAMPTZ:
+        return ConvertedType.TIMESTAMPTZ;
+      case INTERVAL:
+        return ConvertedType.INTERVAL;
+     default:
         throw new RuntimeException("Unknown original type " + type);
      }
    }
