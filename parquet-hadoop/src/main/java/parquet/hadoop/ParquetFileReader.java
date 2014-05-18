@@ -307,6 +307,7 @@ public class ParquetFileReader implements Closeable {
   private final CodecFactory codecFactory;
   private final List<BlockMetaData> blocks;
   private final FSDataInputStream f;
+  private final FileSystem fs;
   private final Path filePath;
   private int currentBlock = 0;
   private final Map<ColumnPath, ColumnDescriptor> paths = new HashMap<ColumnPath, ColumnDescriptor>();
@@ -320,7 +321,7 @@ public class ParquetFileReader implements Closeable {
    */
   public ParquetFileReader(Configuration configuration, Path filePath, List<BlockMetaData> blocks, List<ColumnDescriptor> columns) throws IOException {
     this.filePath = filePath;
-    FileSystem fs = filePath.getFileSystem(configuration);
+    this.fs = filePath.getFileSystem(configuration);
     this.f = fs.open(filePath);
     this.blocks = blocks;
     for (ColumnDescriptor col : columns) {
@@ -371,6 +372,17 @@ public class ParquetFileReader implements Closeable {
     return columnChunkPageReadStore;
   }
 
+  public PageReadStore getPageReadStore() throws IOException {
+    if (currentBlock == blocks.size()) {
+      return null;
+    }
+    BlockMetaData block = blocks.get(currentBlock);
+    ColumnChunkIncReadStore pageReadStore = new ColumnChunkIncReadStore(block.getRowCount(), codecFactory, fs, filePath);
+    for (ColumnChunkMetaData column : block.getColumns()) {
+      pageReadStore.addColumn(paths.get(column.getPath()), column);
+    }
+    return pageReadStore;
+  }
 
 
   @Override
