@@ -17,13 +17,14 @@ package parquet.column.values.rle;
 
 import static parquet.Log.DEBUG;
 
-import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.ByteBuffer;
 
 import parquet.Log;
 import parquet.Preconditions;
+import parquet.bytes.ByteBufferInputStream;
 import parquet.bytes.BytesUtils;
 import parquet.column.values.bitpacking.BytePacker;
 import parquet.column.values.bitpacking.Packer;
@@ -41,14 +42,14 @@ public class RunLengthBitPackingHybridDecoder {
 
   private final int bitWidth;
   private final BytePacker packer;
-  private final ByteArrayInputStream in;
+  private final ByteBufferInputStream in;
 
   private MODE mode;
   private int currentCount;
   private int currentValue;
   private int[] currentBuffer;
 
-  public RunLengthBitPackingHybridDecoder(int bitWidth, ByteArrayInputStream in) {
+  public RunLengthBitPackingHybridDecoder(int bitWidth, ByteBufferInputStream in) {
     if (DEBUG) LOG.debug("decoding bitWidth " + bitWidth);
 
     Preconditions.checkArgument(bitWidth >= 0 && bitWidth <= 32, "bitWidth must be >= 0 and <= 32");
@@ -97,7 +98,7 @@ public class RunLengthBitPackingHybridDecoder {
       bytesToRead = Math.min(bytesToRead, in.available());
       new DataInputStream(in).readFully(bytes, 0, bytesToRead);
       for (int valueIndex = 0, byteIndex = 0; valueIndex < currentCount; valueIndex += 8, byteIndex += bitWidth) {
-        packer.unpack8Values(bytes, byteIndex, currentBuffer, valueIndex);
+        packer.unpack8Values(ByteBuffer.wrap(bytes), byteIndex, currentBuffer, valueIndex);
       }
       break;
     default:
