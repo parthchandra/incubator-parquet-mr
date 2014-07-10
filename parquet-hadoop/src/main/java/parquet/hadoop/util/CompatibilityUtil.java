@@ -155,6 +155,25 @@ public class CompatibilityUtil {
     }
     return res;
   }
+
+  // Caller must allocate the buffer
+  public static ByteBuffer getBuf(FSDataInputStream f, ByteBuffer readBuf, int maxSize) throws IOException {
+    Class<?>[] ZCopyArgs = {ByteBuffer.class};
+    int res=0;
+    try {
+      //Use Zero Copy API if available
+      f.getClass().getMethod("read", ZCopyArgs);
+      readBuf.limit(maxSize);
+      res = f.read(readBuf);
+    } catch (NoSuchMethodException e) {
+      byte[] buf = readBuf.array();
+      f.readFully(buf);
+    }
+    if (res == 0) {
+      throw new EOFException("Null ByteBuffer returned");
+    }
+    return readBuf;
+  }
   
   public static void bbCopy(ByteBuffer dst, ByteBuffer src) {
     final int n = Math.min(dst.remaining(), src.remaining());
