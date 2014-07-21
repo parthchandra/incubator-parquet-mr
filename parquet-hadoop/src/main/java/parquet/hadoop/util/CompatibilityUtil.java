@@ -160,15 +160,26 @@ public class CompatibilityUtil {
   public static ByteBuffer getBuf(FSDataInputStream f, ByteBuffer readBuf, int maxSize) throws IOException {
     Class<?>[] ZCopyArgs = {ByteBuffer.class};
     int res=0;
-    try {
+    //try {
       //Use Zero Copy API if available
-      f.getClass().getMethod("read", ZCopyArgs);
-      readBuf.limit(maxSize);
-      res = f.read(readBuf);
-    } catch (NoSuchMethodException e) {
-      byte[] buf = readBuf.array();
-      f.readFully(buf);
+    //  f.getClass().getMethod("read", ZCopyArgs);
+    //} catch (NoSuchMethodException e)
+    //}
+    int l=readBuf.remaining();
+    if (useV21) {
+      try {
+        res = f.read(readBuf);
+      }catch (UnsupportedOperationException e) {
+        byte[] buf = new byte[maxSize];
+        res=f.read(buf);
+        readBuf.put(buf, 0, maxSize);
+      }
+    } else {
+      byte[] buf = new byte[maxSize];
+      res=f.read(buf);
+      readBuf.put(buf, 0, maxSize);
     }
+
     if (res == 0) {
       throw new EOFException("Null ByteBuffer returned");
     }
@@ -176,7 +187,7 @@ public class CompatibilityUtil {
   }
   
   public static void bbCopy(ByteBuffer dst, ByteBuffer src) {
-    final int n = Math.min(dst.remaining(), src.remaining());
+      final int n = Math.min(dst.remaining(), src.remaining());
     for (int i = 0; i < n; i++) {
       dst.put(src.get());
     }

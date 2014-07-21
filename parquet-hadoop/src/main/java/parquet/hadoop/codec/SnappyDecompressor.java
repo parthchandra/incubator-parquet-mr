@@ -156,10 +156,8 @@ public class SnappyDecompressor implements Decompressor {
         if(!dst.hasRemaining()){
             return;
         }
-
         dst.clear();
-        // There is compressed input, decompress it now.
-        int decompressedSize = Snappy.uncompressedLength(src);
+        //int decompressedSize = Snappy.uncompressedLength(src);
         int size = Snappy.uncompress(src, dst);
         dst.limit(size);
         // We've decompressed the entire input
