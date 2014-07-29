@@ -21,5 +21,9 @@ public enum OriginalType {
   UTF8,
   MAP_KEY_VALUE,
   ENUM,
-  DECIMAL;
+  DECIMAL,
+  DATE,
+  TIME_MILLIS,
+  TIMESTAMP_MILLIS,
+  INTERVAL
 }

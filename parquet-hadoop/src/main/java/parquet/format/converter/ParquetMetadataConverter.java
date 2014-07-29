@@ -312,6 +312,20 @@ public class ParquetMetadataConverter {
         return OriginalType.ENUM;
       case DECIMAL:
         return OriginalType.DECIMAL;
+      case DATE:
+        return OriginalType.DATE;
+      case TIME_MILLIS:
+        return OriginalType.TIME_MILLIS;
+      // TODO - decide if this should be added back after later discussion
+//      case TIME_MIRCOS:
+//        return OriginalType.FINETIME;
+      case TIMESTAMP_MILLIS:
+        return OriginalType.TIMESTAMP_MILLIS;
+      // TODO - Same as above, decide if this should be added back after later discussion
+//      case TIMESTAMPTZ:
+//        return OriginalType.TIMESTAMPTZ;
+      case INTERVAL:
+        return OriginalType.INTERVAL;
       default:
         throw new RuntimeException("Unknown converted type " + type);
     }
@@ -331,7 +345,21 @@ public class ParquetMetadataConverter {
         return ConvertedType.ENUM;
       case DECIMAL:
         return ConvertedType.DECIMAL;
-      default:
+      case DATE:
+        return ConvertedType.DATE;
+      case TIME_MILLIS:
+        return ConvertedType.TIME_MILLIS;
+      // TODO - decide if this should be added back after later discussion
+//      case FINETIME:
+//        return ConvertedType.FINETIME;
+      case TIMESTAMP_MILLIS:
+        return ConvertedType.TIMESTAMP_MILLIS;
+      // TODO - Same as above, decide if this should be added back after later discussion
+//      case TIMESTAMPTZ:
+//        return ConvertedType.TIMESTAMPTZ;
+      case INTERVAL:
+        return ConvertedType.INTERVAL;
+     default:
         throw new RuntimeException("Unknown original type " + type);
      }
    }
@@ -349,7 +377,7 @@ public class ParquetMetadataConverter {
     if (Log.DEBUG) LOG.debug(ParquetMetadata.toPrettyJSON(parquetMetadata));
     return parquetMetadata;
   }
-  
+
   public ParquetMetadata readParquetMetadata(FSDataInputStream from)
       throws IOException {
     FileMetaData fileMetaData = CompatibilityUtil.read(from, new FileMetaData());

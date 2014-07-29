@@ -25,6 +25,7 @@ import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.Mapper;
 import org.apache.hadoop.mapreduce.lib.input.TextInputFormat;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 import parquet.example.data.Group;
 import parquet.example.data.simple.SimpleGroupFactory;
@@ -109,6 +110,7 @@ public class DeprecatedInputFormatTest {
     }
   }
 
+  @Ignore
   @Test
   public void testReadWriteWithCounteDeprecated() throws Exception {
     runMapReduceJob(CompressionCodecName.GZIP);
@@ -119,6 +121,7 @@ public class DeprecatedInputFormatTest {
     //not testing the time read counter since it could be zero due to the size of data is too small
   }
 
+  @Ignore
   @Test
   public void testReadWriteWithoutCounter() throws Exception {
     jobConf.set("parquet.benchmark.time.read", "false");
