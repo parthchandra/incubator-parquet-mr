@@ -160,11 +160,6 @@ public class CompatibilityUtil {
   public static ByteBuffer getBuf(FSDataInputStream f, ByteBuffer readBuf, int maxSize) throws IOException {
     Class<?>[] ZCopyArgs = {ByteBuffer.class};
     int res=0;
-    //try {
-      //Use Zero Copy API if available
-    //  f.getClass().getMethod("read", ZCopyArgs);
-    //} catch (NoSuchMethodException e)
-    //}
     int l=readBuf.remaining();
     if (useV21) {
       try {
