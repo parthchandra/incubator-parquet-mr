@@ -3,7 +3,7 @@
 
   <groupId>com.twitter</groupId>
   <artifactId>parquet</artifactId>
-  <version>1.5.1-Drill-SNAPSHOT</version>
+  <version>1.5.1-drill-r2</version>
   <packaging>pom</packaging>
 
   <name>Parquet MR</name>
@@ -189,6 +189,48 @@
   <build>
     <pluginManagement>
       <plugins>
+      <plugin>
+          <groupId>pl.project13.maven</groupId>
+          <artifactId>git-commit-id-plugin</artifactId>
+          <version>2.1.9</version>
+          <executions>
+            <execution>
+              <id>for-jars</id>
+              <inherited>true</inherited>
+              <goals>
+                <goal>revision</goal>
+              </goals>
+              <configuration>
+                <generateGitPropertiesFilename>target/classes/git.properties</generateGitPropertiesFilename>
+              </configuration>
+            </execution>
+            <execution>
+              <id>for-source-tarball</id>
+              <goals>
+                <goal>revision</goal>
+              </goals>
+              <inherited>false</inherited>
+              <configuration>
+                <generateGitPropertiesFilename>./git.properties</generateGitPropertiesFilename>
+              </configuration>
+            </execution>
+          </executions>
+  
+          <configuration>
+            <dateFormat>dd.MM.yyyy '@' HH:mm:ss z</dateFormat>
+            <verbose>true</verbose>
+            <skipPoms>false</skipPoms>
+            <generateGitPropertiesFile>true</generateGitPropertiesFile>
+            <failOnNoGitDirectory>false</failOnNoGitDirectory>
+            <gitDescribe>
+              <skip>false</skip>
+              <always>false</always>
+              <abbrev>7</abbrev>
+              <dirty>-dirty</dirty>
+              <forceLongFormat>true</forceLongFormat>
+            </gitDescribe>
+          </configuration>
+        </plugin>
         <plugin>
           <artifactId>maven-enforcer-plugin</artifactId>
           <version>1.3.1</version>
