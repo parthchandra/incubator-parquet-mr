@@ -634,6 +634,11 @@ public class TestColumnIO {
           }
 
           @Override
+          public void close() {
+
+          }
+
+          @Override
           public long getBufferedSizeInMemory() {
             throw new UnsupportedOperationException();
           }
@@ -643,11 +648,17 @@ public class TestColumnIO {
       public void flush() {
         assertEquals("read all events", expected.length, counter);
       }
+
+      @Override
+      public void close() {
+
+      }
     };
     MessageColumnIO columnIO = new ColumnIOFactory().getColumnIO(schema);
     GroupWriter groupWriter = new GroupWriter(columnIO.getRecordWriter(columns), schema);
     groupWriter.write(r1);
     groupWriter.write(r2);
     columns.flush();
+    columns.close();
   }
 }

@@ -1,5 +1,6 @@
 package parquet.column;
 
+import parquet.bytes.ByteBufferAllocator;
 import parquet.bytes.BytesUtils;
 import parquet.column.values.ValuesWriter;
 import parquet.column.values.boundedint.DevNullValuesWriter;
@@ -47,19 +48,21 @@ public class ParquetProperties {
   private final int dictionaryPageSizeThreshold;
   private final WriterVersion writerVersion;
   private final boolean enableDictionary;
+  private ByteBufferAllocator allocator;
 
-  public ParquetProperties(int dictPageSize, WriterVersion writerVersion, boolean enableDict) {
+  public ParquetProperties(int dictPageSize, WriterVersion writerVersion, boolean enableDict, ByteBufferAllocator allocator) {
     this.dictionaryPageSizeThreshold = dictPageSize;
     this.writerVersion = writerVersion;
     this.enableDictionary = enableDict;
+    this.allocator=allocator;
   }
   
-  public static ValuesWriter getColumnDescriptorValuesWriter(int maxLevel,  int initialSizePerCol) {
+  public static ValuesWriter getColumnDescriptorValuesWriter(int maxLevel,  int initialSizePerCol, ByteBufferAllocator allocator) {
     if (maxLevel == 0) {
       return new DevNullValuesWriter();
     } else {
       return new RunLengthBitPackingHybridValuesWriter(
-          BytesUtils.getWidthFromMaxInt(maxLevel), initialSizePerCol);
+          BytesUtils.getWidthFromMaxInt(maxLevel), initialSizePerCol, allocator);
     }
   }
 
@@ -67,61 +70,61 @@ public class ParquetProperties {
     switch (path.getType()) {
     case BOOLEAN:
       if(writerVersion == WriterVersion.PARQUET_1_0) {
-        return new BooleanPlainValuesWriter();
+        return new BooleanPlainValuesWriter(this.allocator);
       } else if (writerVersion == WriterVersion.PARQUET_2_0) {
-        return new RunLengthBitPackingHybridValuesWriter(1, initialSizePerCol);
+        return new RunLengthBitPackingHybridValuesWriter(1, initialSizePerCol, this.allocator);
       }
       break;
     case BINARY:
       if(enableDictionary) {
-        return new PlainBinaryDictionaryValuesWriter(dictionaryPageSizeThreshold, initialSizePerCol);
+        return new PlainBinaryDictionaryValuesWriter(dictionaryPageSizeThreshold, initialSizePerCol, this.allocator);
       } else {
         if (writerVersion == WriterVersion.PARQUET_1_0) {
-          return new PlainValuesWriter(initialSizePerCol);
+          return new PlainValuesWriter(initialSizePerCol, this.allocator);
         } else if (writerVersion == WriterVersion.PARQUET_2_0) {
-          return new DeltaByteArrayWriter(initialSizePerCol);
+          return new DeltaByteArrayWriter(initialSizePerCol, this.allocator);
         } 
       }
       break;
     case INT32:
       if(enableDictionary) {
-        return new PlainIntegerDictionaryValuesWriter(dictionaryPageSizeThreshold, initialSizePerCol);
+        return new PlainIntegerDictionaryValuesWriter(dictionaryPageSizeThreshold, initialSizePerCol, this.allocator);
       } else {
         if(writerVersion == WriterVersion.PARQUET_1_0) {
-          return new PlainValuesWriter(initialSizePerCol);
+          return new PlainValuesWriter(initialSizePerCol, this.allocator);
         } else if(writerVersion == WriterVersion.PARQUET_2_0) {
-          return new DeltaBinaryPackingValuesWriter(initialSizePerCol);
+          return new DeltaBinaryPackingValuesWriter(initialSizePerCol, this.allocator);
         }
       }
       break;
     case INT64:
       if(enableDictionary) {
-        return new PlainLongDictionaryValuesWriter(dictionaryPageSizeThreshold, initialSizePerCol);
+        return new PlainLongDictionaryValuesWriter(dictionaryPageSizeThreshold, initialSizePerCol, this.allocator);
       } else {
-        return new PlainValuesWriter(initialSizePerCol);
+        return new PlainValuesWriter(initialSizePerCol, this.allocator);
       }
     case INT96:
       if (enableDictionary) {
-        return new PlainFixedLenArrayDictionaryValuesWriter(dictionaryPageSizeThreshold, initialSizePerCol, 12);
+        return new PlainFixedLenArrayDictionaryValuesWriter(dictionaryPageSizeThreshold, initialSizePerCol, 12, this.allocator);
       } else {
-        return new FixedLenByteArrayPlainValuesWriter(12, initialSizePerCol);
+        return new FixedLenByteArrayPlainValuesWriter(12, initialSizePerCol, this.allocator);
       }
     case DOUBLE:
       if(enableDictionary) {
-        return new PlainDoubleDictionaryValuesWriter(dictionaryPageSizeThreshold, initialSizePerCol);
+        return new PlainDoubleDictionaryValuesWriter(dictionaryPageSizeThreshold, initialSizePerCol, this.allocator);
       } else {
-        return new PlainValuesWriter(initialSizePerCol);
+        return new PlainValuesWriter(initialSizePerCol, this.allocator);
       }
     case FLOAT:
       if(enableDictionary) {
-        return new PlainFloatDictionaryValuesWriter(dictionaryPageSizeThreshold, initialSizePerCol);
+        return new PlainFloatDictionaryValuesWriter(dictionaryPageSizeThreshold, initialSizePerCol, this.allocator);
       } else {
-        return new PlainValuesWriter(initialSizePerCol);
+        return new PlainValuesWriter(initialSizePerCol, this.allocator);
       }
     case FIXED_LEN_BYTE_ARRAY:
-      return new FixedLenByteArrayPlainValuesWriter(path.getTypeLength(), initialSizePerCol);
+      return new FixedLenByteArrayPlainValuesWriter(path.getTypeLength(), initialSizePerCol, this.allocator);
     default:
-      return new PlainValuesWriter(initialSizePerCol);
+      return new PlainValuesWriter(initialSizePerCol, this.allocator);
     }
     return null;
   }

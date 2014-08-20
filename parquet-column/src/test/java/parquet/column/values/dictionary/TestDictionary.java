@@ -29,6 +29,7 @@ import org.junit.Assert;
 import org.junit.Test;
 
 import parquet.bytes.BytesInput;
+import parquet.bytes.DirectByteBufferAllocator;
 import parquet.column.ColumnDescriptor;
 import parquet.column.Dictionary;
 import parquet.column.Encoding;
@@ -50,7 +51,7 @@ public class TestDictionary {
   @Test
   public void testBinaryDictionary() throws IOException {
     int COUNT = 100;
-    ValuesWriter cw = new PlainBinaryDictionaryValuesWriter(200, 10000);
+    ValuesWriter cw = new PlainBinaryDictionaryValuesWriter(200, 10000, new DirectByteBufferAllocator());
     writeRepeated(COUNT, cw, "a");
     BytesInput bytes1 = getBytesAndCheckEncoding(cw, PLAIN_DICTIONARY);
     writeRepeated(COUNT, cw, "b");
@@ -70,7 +71,7 @@ public class TestDictionary {
   public void testBinaryDictionaryFallBack() throws IOException {
     int slabSize = 100;
     int maxDictionaryByteSize = 50;
-    final DictionaryValuesWriter cw = new PlainBinaryDictionaryValuesWriter(maxDictionaryByteSize, slabSize);
+    final DictionaryValuesWriter cw = new PlainBinaryDictionaryValuesWriter(maxDictionaryByteSize, slabSize, new DirectByteBufferAllocator());
     int fallBackThreshold = maxDictionaryByteSize;
     int dataSize=0;
     for (long i = 0; i < 100; i++) {
@@ -101,7 +102,7 @@ public class TestDictionary {
   @Test
   public void testFirstPageFallBack() throws IOException {
     int COUNT = 1000;
-    ValuesWriter cw = new PlainBinaryDictionaryValuesWriter(10000, 10000);
+    ValuesWriter cw = new PlainBinaryDictionaryValuesWriter(10000, 10000, new DirectByteBufferAllocator());
     writeDistinct(COUNT, cw, "a");
     // not efficient so falls back
     BytesInput bytes1 = getBytesAndCheckEncoding(cw, PLAIN);
@@ -119,7 +120,7 @@ public class TestDictionary {
   public void testSecondPageFallBack() throws IOException {
 
     int COUNT = 1000;
-    ValuesWriter cw = new PlainBinaryDictionaryValuesWriter(1000, 10000);
+    ValuesWriter cw = new PlainBinaryDictionaryValuesWriter(1000, 10000, new DirectByteBufferAllocator());
     writeRepeated(COUNT, cw, "a");
     BytesInput bytes1 = getBytesAndCheckEncoding(cw, PLAIN_DICTIONARY);
     writeDistinct(COUNT, cw, "b");
@@ -141,7 +142,7 @@ public class TestDictionary {
 
     int COUNT = 1000;
     int COUNT2 = 2000;
-    final DictionaryValuesWriter cw = new PlainLongDictionaryValuesWriter(10000, 10000);
+    final DictionaryValuesWriter cw = new PlainLongDictionaryValuesWriter(10000, 10000, new DirectByteBufferAllocator());
     for (long i = 0; i < COUNT; i++) {
       cw.writeLong(i % 50);
     }
@@ -191,7 +192,7 @@ public class TestDictionary {
   public void testLongDictionaryFallBack() throws IOException {
     int slabSize = 100;
     int maxDictionaryByteSize = 50;
-    final DictionaryValuesWriter cw = new PlainLongDictionaryValuesWriter(maxDictionaryByteSize, slabSize);
+    final DictionaryValuesWriter cw = new PlainLongDictionaryValuesWriter(maxDictionaryByteSize, slabSize, new DirectByteBufferAllocator());
     // Fallbacked to Plain encoding, therefore use PlainValuesReader to read it back
     ValuesReader reader = new PlainValuesReader.LongPlainValuesReader();
     
@@ -209,7 +210,7 @@ public class TestDictionary {
 
     int COUNT = 1000;
     int COUNT2 = 2000;
-    final DictionaryValuesWriter cw = new PlainDoubleDictionaryValuesWriter(10000, 10000);
+    final DictionaryValuesWriter cw = new PlainDoubleDictionaryValuesWriter(10000, 10000, new DirectByteBufferAllocator());
 
     for (double i = 0; i < COUNT; i++) {
       cw.writeDouble(i % 50);
@@ -262,7 +263,7 @@ public class TestDictionary {
   public void testDoubleDictionaryFallBack() throws IOException {
     int slabSize = 100;
     int maxDictionaryByteSize = 50;
-    final DictionaryValuesWriter cw = new PlainDoubleDictionaryValuesWriter(maxDictionaryByteSize, slabSize);
+    final DictionaryValuesWriter cw = new PlainDoubleDictionaryValuesWriter(maxDictionaryByteSize, slabSize, new DirectByteBufferAllocator());
     
     // Fallbacked to Plain encoding, therefore use PlainValuesReader to read it back
     ValuesReader reader = new PlainValuesReader.DoublePlainValuesReader();
@@ -281,7 +282,7 @@ public class TestDictionary {
 
     int COUNT = 2000;
     int COUNT2 = 4000;
-    final DictionaryValuesWriter cw = new PlainIntegerDictionaryValuesWriter(10000, 10000);
+    final DictionaryValuesWriter cw = new PlainIntegerDictionaryValuesWriter(10000, 10000, new DirectByteBufferAllocator());
 
     for (int i = 0; i < COUNT; i++) {
       cw.writeInteger(i % 50);
@@ -333,7 +334,7 @@ public class TestDictionary {
   public void testIntDictionaryFallBack() throws IOException {
     int slabSize = 100;
     int maxDictionaryByteSize = 50;
-    final DictionaryValuesWriter cw = new PlainIntegerDictionaryValuesWriter(maxDictionaryByteSize, slabSize);
+    final DictionaryValuesWriter cw = new PlainIntegerDictionaryValuesWriter(maxDictionaryByteSize, slabSize, new DirectByteBufferAllocator());
     
     // Fallbacked to Plain encoding, therefore use PlainValuesReader to read it back
     ValuesReader reader = new PlainValuesReader.IntegerPlainValuesReader();
@@ -352,7 +353,7 @@ public class TestDictionary {
 
     int COUNT = 2000;
     int COUNT2 = 4000;
-    final DictionaryValuesWriter cw = new PlainFloatDictionaryValuesWriter(10000, 10000);
+    final DictionaryValuesWriter cw = new PlainFloatDictionaryValuesWriter(10000, 10000, new DirectByteBufferAllocator());
 
     for (float i = 0; i < COUNT; i++) {
       cw.writeFloat(i % 50);
@@ -404,7 +405,7 @@ public class TestDictionary {
   public void testFloatDictionaryFallBack() throws IOException {
     int slabSize = 100;
     int maxDictionaryByteSize = 50;
-    final DictionaryValuesWriter cw = new PlainFloatDictionaryValuesWriter(maxDictionaryByteSize, slabSize);
+    final DictionaryValuesWriter cw = new PlainFloatDictionaryValuesWriter(maxDictionaryByteSize, slabSize, new DirectByteBufferAllocator());
     
     // Fallbacked to Plain encoding, therefore use PlainValuesReader to read it back
     ValuesReader reader = new PlainValuesReader.FloatPlainValuesReader();

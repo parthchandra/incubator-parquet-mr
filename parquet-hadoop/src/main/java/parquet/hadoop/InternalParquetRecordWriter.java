@@ -25,6 +25,7 @@ import java.io.IOException;
 import java.util.Map;
 
 import parquet.Log;
+import parquet.bytes.ByteBufferAllocator;
 import parquet.column.ParquetProperties.WriterVersion;
 import parquet.column.impl.ColumnWriteStoreImpl;
 import parquet.hadoop.CodecFactory.BytesCompressor;
@@ -57,6 +58,7 @@ class InternalParquetRecordWriter<T> {
 
   private ColumnWriteStoreImpl store;
   private ColumnChunkPageWriteStore pageStore;
+  private ByteBufferAllocator allocator;
 
   /**
    * @param w the file to write to
@@ -77,7 +79,8 @@ class InternalParquetRecordWriter<T> {
       int dictionaryPageSize,
       boolean enableDictionary,
       boolean validating,
-      WriterVersion writerVersion) {
+      WriterVersion writerVersion,
+      ByteBufferAllocator allocator) {
     this.w = w;
     this.writeSupport = checkNotNull(writeSupport, "writeSupport");
     this.schema = schema;
@@ -89,6 +92,7 @@ class InternalParquetRecordWriter<T> {
     this.enableDictionary = enableDictionary;
     this.validating = validating;
     this.writerVersion = writerVersion;
+    this.allocator=allocator;
     initStore();
   }
 
@@ -97,7 +101,7 @@ class InternalParquetRecordWriter<T> {
     // ideally we divide the block equally across the columns
     // it is unlikely all columns are going to be the same size.
     int initialBlockBufferSize = max(MINIMUM_BUFFER_SIZE, blockSize / schema.getColumns().size() / 5);
-    pageStore = new ColumnChunkPageWriteStore(compressor, schema, initialBlockBufferSize);
+    pageStore = new ColumnChunkPageWriteStore(compressor, schema, initialBlockBufferSize, this.allocator);
     // we don't want this number to be too small either
     // ideally, slightly bigger than the page size, but not bigger than the block buffer
     int initialPageBufferSize = max(MINIMUM_BUFFER_SIZE, min(pageSize + pageSize / 10, initialBlockBufferSize));
@@ -147,6 +151,8 @@ class InternalParquetRecordWriter<T> {
     pageStore.flushToFileWriter(w);
     recordCount = 0;
     w.endBlock();
+    store.close();
+    pageStore.close();
     store = null;
     pageStore = null;
   }
