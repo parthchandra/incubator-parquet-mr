@@ -2,6 +2,7 @@ package parquet.column;
 
 import parquet.bytes.ByteBufferAllocator;
 import parquet.bytes.BytesUtils;
+import parquet.bytes.HeapByteBufferAllocator;
 import parquet.column.values.ValuesWriter;
 import parquet.column.values.boundedint.DevNullValuesWriter;
 import parquet.column.values.delta.DeltaBinaryPackingValuesWriter;
@@ -50,6 +51,10 @@ public class ParquetProperties {
   private final boolean enableDictionary;
   private ByteBufferAllocator allocator;
 
+  public ParquetProperties(int dictPageSize, WriterVersion writerVersion, boolean enableDict) {
+    this(dictPageSize, writerVersion, enableDict, new HeapByteBufferAllocator());
+  }
+
   public ParquetProperties(int dictPageSize, WriterVersion writerVersion, boolean enableDict, ByteBufferAllocator allocator) {
     this.dictionaryPageSizeThreshold = dictPageSize;
     this.writerVersion = writerVersion;
@@ -62,7 +67,7 @@ public class ParquetProperties {
       return new DevNullValuesWriter();
     } else {
       return new RunLengthBitPackingHybridValuesWriter(
-          BytesUtils.getWidthFromMaxInt(maxLevel), initialSizePerCol, allocator);
+          BytesUtils.getWidthFromMaxInt(maxLevel), initialSizePerCol, allocator!=null?allocator:new HeapByteBufferAllocator());
     }
   }
 
