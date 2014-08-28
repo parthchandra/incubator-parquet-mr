@@ -30,6 +30,7 @@ import parquet.org.apache.thrift.TBase;
 import parquet.org.apache.thrift.TException;
 import parquet.format.FileMetaData;
 import parquet.org.apache.thrift.protocol.*;
+import parquet.org.apache.thrift.transport.TIOStreamTransport;
 import parquet.org.apache.thrift.transport.TTransport;
 import parquet.org.apache.thrift.transport.TTransportException;
 
@@ -191,7 +192,7 @@ public class CompatibilityUtil {
   public static <T extends TBase<?,?>> T read(FSDataInputStream f, T tbase)
       throws IOException {
     try {
-      tbase.read(new TCompactProtocol(new FSDISTransport(f)));
+      tbase.read(new TCompactProtocol(new TIOStreamTransport(f)));
       return tbase;
     } catch (TException e) {
       throw new IOException("can not read " + tbase.getClass() + ": "
