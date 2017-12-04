@@ -541,9 +541,9 @@ public class ParquetMetadataConverter {
         return filterFileMetaData(readFileMetaData(from), filter);
       }
     });
-    if (Log.DEBUG) LOG.debug(fileMetaData);
+    //if (Log.DEBUG) LOG.debug(fileMetaData);
     ParquetMetadata parquetMetadata = fromParquetMetadata(fileMetaData);
-    if (Log.DEBUG) LOG.debug(ParquetMetadata.toPrettyJSON(parquetMetadata));
+    //if (Log.DEBUG) LOG.debug(ParquetMetadata.toPrettyJSON(parquetMetadata));
     return parquetMetadata;
   }
 

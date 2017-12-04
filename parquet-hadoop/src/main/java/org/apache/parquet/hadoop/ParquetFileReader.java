@@ -430,7 +430,10 @@ public class ParquetFileReader implements Closeable {
       }
       int FOOTER_LENGTH_SIZE = 4;
       if (l < MAGIC.length + FOOTER_LENGTH_SIZE + MAGIC.length) { // MAGIC + data + footer + footerIndex + MAGIC
-        throw new RuntimeException(file.getPath() + " is not a Parquet file (too small)");
+        String msg = file.getPath() + " is not a Parquet file (too small)";
+        LOG.error(msg);
+        logFileInfo(file, f);
+        throw new RuntimeException(msg);
       }
       long footerLengthIndex = l - FOOTER_LENGTH_SIZE - MAGIC.length;
       if (Log.DEBUG) {
@@ -442,14 +445,21 @@ public class ParquetFileReader implements Closeable {
       byte[] magic = new byte[MAGIC.length];
       f.readFully(magic);
       if (!Arrays.equals(MAGIC, magic)) {
-        throw new RuntimeException(file.getPath() + " is not a Parquet file. expected magic number at tail " + Arrays.toString(MAGIC) + " but found " + Arrays.toString(magic));
+        String msg = file.getPath() + " is not a Parquet file. expected magic number at tail " + Arrays
+            .toString(MAGIC) + " but found " + Arrays.toString(magic);
+        LOG.error(msg);
+        logFileInfo(file, f);
+        throw new RuntimeException(msg);
       }
       long footerIndex = footerLengthIndex - footerLength;
       if (Log.DEBUG) {
         LOG.debug("read footer length: " + footerLength + ", footer index: " + footerIndex);
       }
       if (footerIndex < MAGIC.length || footerIndex >= footerLengthIndex) {
-        throw new RuntimeException("corrupted file: the footer index is not within the file");
+        String msg = "Corrupted file: the footer index is not within the file";
+        LOG.error(msg);
+        logFileInfo(file, f);
+        throw new RuntimeException(msg);
       }
       f.seek(footerIndex);
       return converter.readParquetMetadata(f, filter);
@@ -457,6 +467,25 @@ public class ParquetFileReader implements Closeable {
       f.close();
     }
   }
+
+
+  public static void logFileInfo(FileStatus fileStatus, FSDataInputStream fStream) {
+    LOG.error("fileStatus: " + fileStatus);
+    LOG.error("fileStream: "  + fStream);
+    logStackTrace();
+    return;
+  }
+
+  public static void logStackTrace() {
+    LOG.error("Stack Traces <BEGIN>");
+    for (Map.Entry<Thread, StackTraceElement[]> entry : Thread.getAllStackTraces().entrySet()) {
+      LOG.error("\t" + entry.getKey().getName() + ":");
+      for (StackTraceElement element : entry.getValue())
+        LOG.error("\t\t" + element);
+    }
+    LOG.error("Stack Traces <END>");
+  }
+
 
   private final CodecFactory codecFactory;
   private final List<BlockMetaData> blocks;
