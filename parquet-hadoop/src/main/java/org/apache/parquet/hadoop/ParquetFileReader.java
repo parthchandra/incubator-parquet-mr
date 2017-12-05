@@ -423,21 +423,22 @@ public class ParquetFileReader implements Closeable {
   public static final ParquetMetadata readFooter(Configuration configuration, FileStatus file, MetadataFilter filter) throws IOException {
     FileSystem fileSystem = file.getPath().getFileSystem(configuration);
     FSDataInputStream f = fileSystem.open(file.getPath());
+    String threadName = Thread.currentThread().getName();
     try {
       long l = file.getLen();
       if (Log.DEBUG) {
-        LOG.debug("File length " + l);
+        LOG.debug("[" + threadName + "]" + " File length " + l);
       }
       int FOOTER_LENGTH_SIZE = 4;
       if (l < MAGIC.length + FOOTER_LENGTH_SIZE + MAGIC.length) { // MAGIC + data + footer + footerIndex + MAGIC
         String msg = file.getPath() + " is not a Parquet file (too small)";
         LOG.error(msg);
-        logFileInfo(file, f);
+        logFileInfo(threadName, file, f);
         throw new RuntimeException(msg);
       }
       long footerLengthIndex = l - FOOTER_LENGTH_SIZE - MAGIC.length;
       if (Log.DEBUG) {
-        LOG.debug("reading footer index at " + footerLengthIndex);
+        LOG.debug("["+threadName+"]"+"reading footer index at " + footerLengthIndex);
       }
 
       f.seek(footerLengthIndex);
@@ -448,17 +449,18 @@ public class ParquetFileReader implements Closeable {
         String msg = file.getPath() + " is not a Parquet file. expected magic number at tail " + Arrays
             .toString(MAGIC) + " but found " + Arrays.toString(magic);
         LOG.error(msg);
-        logFileInfo(file, f);
+        logDataAndFileInfo(threadName, file, f, footerLength, magic);
         throw new RuntimeException(msg);
       }
       long footerIndex = footerLengthIndex - footerLength;
       if (Log.DEBUG) {
-        LOG.debug("read footer length: " + footerLength + ", footer index: " + footerIndex);
+        LOG.debug("[" + threadName + "]" + "read footer length: " + footerLength + ", footer index: "
+            + footerIndex);
       }
       if (footerIndex < MAGIC.length || footerIndex >= footerLengthIndex) {
         String msg = "Corrupted file: the footer index is not within the file";
         LOG.error(msg);
-        logFileInfo(file, f);
+        logFileInfo(threadName, file, f);
         throw new RuntimeException(msg);
       }
       f.seek(footerIndex);
@@ -469,9 +471,42 @@ public class ParquetFileReader implements Closeable {
   }
 
 
-  public static void logFileInfo(FileStatus fileStatus, FSDataInputStream fStream) {
-    LOG.error("fileStatus: " + fileStatus);
-    LOG.error("fileStream: "  + fStream);
+  public static void logDataAndFileInfo(String threadName, FileStatus fileStatus, FSDataInputStream fStream, int lastInt, byte[] lastBytes) {
+    String str = new StringBuilder()
+        .append("[").append(threadName).append("]")
+        .append(" Footer length read: ").append(lastInt)
+        .append(" Magic string read: ").append(Arrays.toString(lastBytes))
+        .toString();
+    LOG.error(str);
+    logFileInfo(threadName, fileStatus, fStream);
+
+  }
+
+  public static void logFileInfo(String threadName, FileStatus fileStatus, FSDataInputStream fStream) {
+    String fstat = new StringBuilder().append("file status: -")
+        .append("[").append(threadName).append("]")
+        .append(" access time:").append(fileStatus.getAccessTime())
+        .append(" block size :").append(fileStatus.getBlockSize())
+        .append(" group :").append(fileStatus.getGroup())
+        .append(" len :").append(fileStatus.getLen())
+        .append(" modification time :").append(fileStatus.getModificationTime())
+        .append(" owner :").append(fileStatus.getOwner())
+        .append(" path :").append(fileStatus.getPath())
+        .append(" permission :").append(fileStatus.getPermission())
+        .append(" replication :").append(fileStatus.getReplication())
+        .append(" isDir :").append(fileStatus.isDir())
+        .toString();
+    LOG.error(fstat);
+    String fstr;
+    try {
+      fstr = new StringBuilder().append("file stream -")
+          .append("[").append(threadName).append("]")
+          .append(" Pos: ").append(fStream.getPos())
+          .toString();
+    } catch (IOException e) {
+      fstr = "Exception while trying to log file stream info. Exception :" +e;
+    }
+    LOG.error(fstr);
     logStackTrace();
     return;
   }
