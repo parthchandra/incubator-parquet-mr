@@ -132,6 +132,18 @@ public class TestColumnChunkPageWriteStore {
 
   @Test
   public void test() throws Exception {
+    conf.set("parquet.read.async.enabled", Boolean.toString(false));
+    testInternal();
+  }
+
+  @Test
+  public void testAsync() throws Exception {
+    conf.set("parquet.read.async.enabled", Boolean.toString(true));
+    testInternal();
+  }
+
+
+ public void testInternal() throws Exception {
     Path file = new Path("target/test/TestColumnChunkPageWriteStore/test.parquet");
     Path root = file.getParent();
     FileSystem fs = file.getFileSystem(conf);

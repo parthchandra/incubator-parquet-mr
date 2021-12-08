@@ -1782,14 +1782,21 @@ public class ParquetFileReader implements Closeable {
         buffers.add(options.getAllocator().allocate(lastAllocationSize));
       }
 
-      for (ByteBuffer buffer : buffers) {
-        f.readFully(buffer);
-        buffer.flip();
+      ByteBufferInputStream stream;
+      if (!options.isAsyncReaderEnabled()) {
+        // pre-read the files into the allocated buffers
+        for (ByteBuffer buffer : buffers) {
+          f.readFully(buffer);
+          buffer.flip();
+        }
+        stream = ByteBufferInputStream.wrap(buffers);
+      } else {
+        // The underlying implementation will read the data from the input stream
+        // asynchronously
+        stream = ByteBufferInputStream.wrapAsync(f, buffers);
       }
-
       // report in a counter the data we just scanned
       BenchmarkCounter.incrementBytesRead(length);
-      ByteBufferInputStream stream = ByteBufferInputStream.wrap(buffers);
       for (final ChunkDescriptor descriptor : chunks) {
         builder.add(descriptor, stream.sliceBuffers(descriptor.size), f);
       }

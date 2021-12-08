@@ -27,6 +27,7 @@ import java.util.Arrays;
 import java.util.List;
 
 import org.apache.parquet.ShouldNeverHappenException;
+import org.apache.parquet.io.SeekableInputStream;
 
 public class ByteBufferInputStream extends InputStream {
 
@@ -47,6 +48,11 @@ public class ByteBufferInputStream extends InputStream {
     } else {
       return new MultiBufferInputStream(buffers);
     }
+  }
+
+  public static ByteBufferInputStream wrapAsync(SeekableInputStream fileInputStream,
+    List<ByteBuffer> buffers) {
+    return new AsyncMultiBufferInputStream(fileInputStream, buffers);
   }
 
   ByteBufferInputStream() {
