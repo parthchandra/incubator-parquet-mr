@@ -254,23 +254,23 @@ public class CompressionConverter {
     }
 
     public void setStreamPosition(long newPos) throws IOException {
-      f.seek(newPos);
+      inputStream.seek(newPos);
     }
 
     public void blockRead(byte[] data, int start, int len) throws IOException {
-      f.readFully(data, start, len);
+      inputStream.readFully(data, start, len);
     }
 
     public PageHeader readPageHeader() throws IOException {
-      return Util.readPageHeader(f);
+      return Util.readPageHeader(inputStream);
     }
 
     public long getPos() throws IOException {
-      return f.getPos();
+      return inputStream.getPos();
     }
 
     public SeekableInputStream getStream() {
-      return f;
+      return inputStream;
     }
   }
 }
