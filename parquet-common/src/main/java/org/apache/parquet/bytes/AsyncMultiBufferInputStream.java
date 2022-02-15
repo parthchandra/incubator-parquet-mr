@@ -28,6 +28,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
 import org.apache.parquet.io.SeekableInputStream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -35,17 +36,19 @@ import org.slf4j.LoggerFactory;
 class AsyncMultiBufferInputStream extends MultiBufferInputStream {
 
   private static final Logger LOG = LoggerFactory.getLogger(AsyncMultiBufferInputStream.class);
-  public static ExecutorService threadPool = Executors.newFixedThreadPool(
-    Runtime.getRuntime().availableProcessors() * 2);
 
   final SeekableInputStream fileInputStream;
   int fetchIndex = 0;
   int readIndex = 0;
+  ExecutorService threadPool;
   LinkedBlockingQueue<Future<Void>> readFutures;
+  boolean closed = false;
 
-  AsyncMultiBufferInputStream(SeekableInputStream fileInputStream, List<ByteBuffer> buffers) {
+  AsyncMultiBufferInputStream(ExecutorService threadPool, SeekableInputStream fileInputStream,
+    List<ByteBuffer> buffers) {
     super(buffers);
     this.fileInputStream = fileInputStream;
+    this.threadPool = threadPool;
     readFutures = new LinkedBlockingQueue<>(buffers.size());
     if (LOG.isDebugEnabled()) {
       LOG.debug("ASYNC: Begin read into buffers ");
@@ -58,11 +61,17 @@ class AsyncMultiBufferInputStream extends MultiBufferInputStream {
     nextBuffer();
   }
 
+  private void checkNotClosed() {
+    if (closed) {
+      throw new RuntimeException("Stream is closed");
+    }
+  }
 
   private void fetchAll() {
+    checkNotClosed();
     try {
       readFutures.put(
-        AsyncMultiBufferInputStream.threadPool.submit(new ReadPageDataTask(this)));
+        threadPool.submit(new ReadPageDataTask(this)));
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
       throw new RuntimeException(e);
@@ -71,6 +80,7 @@ class AsyncMultiBufferInputStream extends MultiBufferInputStream {
 
   @Override
   protected boolean nextBuffer() {
+    checkNotClosed();
     // hack: parent constructor can call this method before this class is fully initialized.
     // Just return without doing anything.
     if (readFutures == null) {
@@ -99,6 +109,24 @@ class AsyncMultiBufferInputStream extends MultiBufferInputStream {
       readIndex++;
     }
     return super.nextBuffer();
+  }
+
+  public void close() {
+    Future<Void> readResult;
+    while(!readFutures.isEmpty()) {
+      try {
+        readResult = readFutures.poll();
+        readResult.get();
+        if(!readResult.isDone() && !readResult.isCancelled()){
+          readResult.cancel(true);
+        } else {
+          readResult.get(1, TimeUnit.MILLISECONDS);
+        }
+      } catch (Exception e) {
+        // Do nothing
+      }
+    }
+    closed = true;
   }
 
 
@@ -136,7 +164,7 @@ class AsyncMultiBufferInputStream extends MultiBufferInputStream {
         if (!eof && parent.fetchIndex < parent.buffers.size()) {
           try {
             parent.readFutures.put(
-              AsyncMultiBufferInputStream.threadPool.submit(new ReadPageDataTask(parent)));
+              parent.threadPool.submit(new ReadPageDataTask(parent)));
           } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new RuntimeException(e);

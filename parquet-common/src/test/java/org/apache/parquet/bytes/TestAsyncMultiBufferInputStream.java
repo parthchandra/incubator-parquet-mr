@@ -32,6 +32,8 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import org.apache.parquet.io.DelegatingSeekableInputStream;
 import org.apache.parquet.io.SeekableInputStream;
 import org.junit.AfterClass;
@@ -63,6 +65,10 @@ public class TestAsyncMultiBufferInputStream extends TestMultiBufferInputStream 
   private static Path tempPath;
   private static String filename;
   private static SeekableInputStream seekableInputStream;
+  private static ExecutorService threadPool = Executors.newFixedThreadPool(
+    Runtime.getRuntime().availableProcessors() * 2,
+    r -> new Thread(r, "test-parquet-async-io")
+  );
 
   @BeforeClass
   public static void init() throws IOException {
@@ -72,11 +78,13 @@ public class TestAsyncMultiBufferInputStream extends TestMultiBufferInputStream 
     for (ByteBuffer writedatum : WRITEDATA) {
       outputStream.write(writedatum.array());
     }
+
   }
 
 
   @AfterClass
   public static void close() throws IOException {
+    threadPool.shutdownNow();
     Files.deleteIfExists(Paths.get(filename));
     Files.deleteIfExists(tempPath);
   }
@@ -88,7 +96,7 @@ public class TestAsyncMultiBufferInputStream extends TestMultiBufferInputStream 
     } catch (FileNotFoundException e) {
       throw new RuntimeException("Failed to initialize test input stream.", e);
     }
-    return new AsyncMultiBufferInputStream(seekableInputStream, DATA);
+    return new AsyncMultiBufferInputStream(threadPool, seekableInputStream, DATA);
   }
 
   @Override
