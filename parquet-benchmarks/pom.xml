@@ -38,7 +38,7 @@
 
   <dependencies>
     <dependency>
-       <groupId>org.apache.parquet</groupId>
+      <groupId>org.apache.parquet</groupId>
        <artifactId>parquet-hadoop</artifactId>
        <version>${project.version}</version>
     </dependency>

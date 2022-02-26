@@ -155,7 +155,7 @@
       <groupId>org.apache.thrift</groupId>
       <artifactId>libthrift</artifactId>
       <version>${format.thrift.version}</version>
-    </dependency>
+     </dependency>
   </dependencies>
 
   <profiles>
