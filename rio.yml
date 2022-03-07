@@ -10,6 +10,30 @@ machine:
     version: 8-applejdk
 
 builds:
+  - name: parquet-mr-1.12.x-dev-apple-snapshot-pr
+    branchName: parquet-1.12.x-dev-apple
+    machine:
+      baseImage: docker.apple.com/cpbuild7/applejdk-8
+      env:
+        MAVEN_PARMS: "-Drat.skip=true"
+    build:
+      template: freestyle:v4:prb
+      steps:
+        - yum install -y autoconf automake libtool unzip gcc-c++ zlib-devel openssl-devel file
+        - mkdir temp && cd temp
+        - wget https://github.com/google/protobuf/archive/v3.5.1.tar.gz -O protobuf-3.5.1.tar.gz && tar xzf protobuf-3.5.1.tar.gz
+        - cd protobuf-3.5.1 && ./autogen.sh && ./configure
+        - make -j8 && make install && ldconfig
+        - cd ..
+        - wget -nv http://archive.apache.org/dist/thrift/0.15.0/thrift-0.15.0.tar.gz && tar xzf thrift-0.15.0.tar.gz
+        - cd thrift-0.15.0 && chmod +x ./configure
+        - ./configure --disable-libs
+        - make -j8 && make install
+        - cd ..
+        - wget https://jitpack.io/com/github/rdblue/brotli-codec/0.1.1/brotli-codec-0.1.1.jar
+        - mvn $MAVEN_PARM org.apache.maven.plugins:maven-install-plugin:2.5.2:install-file -Dfile=brotli-codec-0.1.1.jar -DgroupId=com.github.rdblue -DartifactId=brotli-codec -Dversion=0.1.1 -Dpackaging=jar
+        - cd .. && rm -rf temp
+        - mvn $MAVEN_PARMS clean test
   - name: publish-parquet-mr-1.12.x-dev-apple-snapshot
     branchName: parquet-1.12.x-dev-apple
     machine:
@@ -42,7 +66,6 @@ builds:
       freeform:
         - publish:
             - repo: m2:oss-patched
-
   - name: run-test-parquet-mr-1.12.x-dev-apple-snapshot
     branchName: parquet-1.12.x-dev-apple
     machine:
@@ -71,32 +94,6 @@ builds:
       freeform:
         - publish:
             - repo: m2:oss-patched
-
-  - name: parquet-mr-1.12.x-dev-apple-snapshot-pr
-    branchName: parquet-1.12.x-dev-apple
-    machine:
-      baseImage: docker.apple.com/cpbuild7/applejdk-8
-      env:
-        MAVEN_PARMS: "-Drat.skip=true"
-    build:
-      template: freestyle:v4:prb
-      steps:
-        - yum install -y autoconf automake libtool unzip gcc-c++ zlib-devel openssl-devel file
-        - mkdir temp && cd temp
-        - wget https://github.com/google/protobuf/archive/v3.5.1.tar.gz -O protobuf-3.5.1.tar.gz && tar xzf protobuf-3.5.1.tar.gz
-        - cd protobuf-3.5.1 && ./autogen.sh && ./configure
-        - make -j8 && make install && ldconfig
-        - cd ..
-        - wget -nv http://archive.apache.org/dist/thrift/0.15.0/thrift-0.15.0.tar.gz && tar xzf thrift-0.15.0.tar.gz
-        - cd thrift-0.15.0 && chmod +x ./configure
-        - ./configure --disable-libs
-        - make -j8 && make install
-        - cd ..
-        - wget https://jitpack.io/com/github/rdblue/brotli-codec/0.1.1/brotli-codec-0.1.1.jar
-        - mvn $MAVEN_PARM org.apache.maven.plugins:maven-install-plugin:2.5.2:install-file -Dfile=brotli-codec-0.1.1.jar -DgroupId=com.github.rdblue -DartifactId=brotli-codec -Dversion=0.1.1 -Dpackaging=jar
-        - cd .. && rm -rf temp
-        - mvn $MAVEN_PARMS clean test
-
   - name: publish-parquet-mr-1.12.x-dev-apple-release
     branchName: parquet-1.12.x-dev-apple-release
     machine:
@@ -135,3 +132,4 @@ builds:
       tag:
         enabled: true
         expression: "1.12.0.0-dev-apple"
+
