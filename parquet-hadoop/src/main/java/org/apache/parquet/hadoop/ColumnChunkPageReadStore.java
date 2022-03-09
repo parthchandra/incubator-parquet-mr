@@ -119,7 +119,7 @@ public class ColumnChunkPageReadStore implements PageReadStore, DictionaryPageRe
     }
 
     public int getPageValueCount() {
-      return compressedPages.element().getValueCount();
+      return compressedPages.element().get().getValueCount();
     }
 
     public void skipPage() {
