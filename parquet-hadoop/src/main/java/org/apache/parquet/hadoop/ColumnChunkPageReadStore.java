@@ -55,7 +55,7 @@ import org.slf4j.LoggerFactory;
  * in our format: columns, chunks, and pages
  *
  */
-class ColumnChunkPageReadStore implements PageReadStore, DictionaryPageReadStore {
+public class ColumnChunkPageReadStore implements PageReadStore, DictionaryPageReadStore {
   private static final Logger LOG = LoggerFactory.getLogger(ColumnChunkPageReadStore.class);
 
   /**
@@ -65,7 +65,7 @@ class ColumnChunkPageReadStore implements PageReadStore, DictionaryPageReadStore
    * This implementation is provided with a list of pages, each of which
    * is decompressed and passed through.
    */
-  static final class ColumnChunkPageReader implements PageReader {
+  public static final class ColumnChunkPageReader implements PageReader {
 
     private static final Logger LOG = LoggerFactory.getLogger(ColumnChunkPageReader.class);
 
@@ -116,6 +116,15 @@ class ColumnChunkPageReadStore implements PageReadStore, DictionaryPageReadStore
     @Override
     public long getTotalValueCount() {
       return valueCount;
+    }
+
+    public int getPageValueCount() {
+      return compressedPages.element().getValueCount();
+    }
+
+    public void skipPage() {
+      compressedPages.poll();
+      pageIndex++;
     }
 
     @Override
