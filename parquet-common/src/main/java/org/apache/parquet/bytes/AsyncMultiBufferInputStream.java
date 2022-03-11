@@ -19,16 +19,17 @@
 
 package org.apache.parquet.bytes;
 
-import java.io.EOFException;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.List;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.LongAccumulator;
+import java.util.concurrent.atomic.LongAdder;
 import org.apache.parquet.io.SeekableInputStream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -42,7 +43,13 @@ class AsyncMultiBufferInputStream extends MultiBufferInputStream {
   int readIndex = 0;
   ExecutorService threadPool;
   LinkedBlockingQueue<Future<Void>> readFutures;
+  BlockingQueue<ByteBuffer> buffersRead;
   boolean closed = false;
+  Exception ioException;
+
+  LongAdder totalTimeBlocked = new LongAdder();
+  LongAdder totalCountBlocked = new LongAdder();
+  LongAccumulator maxTimeBlocked = new LongAccumulator(Long::max, 0L);
 
   AsyncMultiBufferInputStream(ExecutorService threadPool, SeekableInputStream fileInputStream,
     List<ByteBuffer> buffers) {
@@ -50,6 +57,7 @@ class AsyncMultiBufferInputStream extends MultiBufferInputStream {
     this.fileInputStream = fileInputStream;
     this.threadPool = threadPool;
     readFutures = new LinkedBlockingQueue<>(buffers.size());
+    buffersRead = new LinkedBlockingQueue<>(buffers.size());
     if (LOG.isDebugEnabled()) {
       LOG.debug("ASYNC: Begin read into buffers ");
       for (ByteBuffer buf : buffers) {
@@ -61,14 +69,19 @@ class AsyncMultiBufferInputStream extends MultiBufferInputStream {
     nextBuffer();
   }
 
-  private void checkNotClosed() {
+  private void checkState() {
     if (closed) {
       throw new RuntimeException("Stream is closed");
+    }
+    synchronized (this) {
+      if (ioException != null) {
+        throw new RuntimeException(ioException);
+      }
     }
   }
 
   private void fetchAll() {
-    checkNotClosed();
+    checkState();
     try {
       readFutures.put(
         threadPool.submit(new ReadPageDataTask(this)));
@@ -76,29 +89,28 @@ class AsyncMultiBufferInputStream extends MultiBufferInputStream {
       Thread.currentThread().interrupt();
       throw new RuntimeException(e);
     }
+    ;
   }
 
   @Override
   protected boolean nextBuffer() {
-    checkNotClosed();
+    checkState();
     // hack: parent constructor can call this method before this class is fully initialized.
     // Just return without doing anything.
-    if (readFutures == null) {
+    if (buffersRead == null) {
       return false;
     }
     if (readIndex < buffers.size()) {
       long start = System.nanoTime();
       try {
-        if (LOG.isDebugEnabled()) {
-          LOG.debug("ASYNC (next): Getting next buffer");
-        }
-        Future<Void> readResult;
-        readResult = readFutures.take();
-        readResult.get();
+        LOG.debug("ASYNC (next): Getting next buffer");
+        //noinspection unused
+        ByteBuffer readResult = buffersRead.take();
         long timeSpent = System.nanoTime() - start;
-        if (LOG.isDebugEnabled()) {
-          LOG.debug("ASYNC (next): {}: Time blocked for read {} ns", this, timeSpent);
-        }
+        totalCountBlocked.add(1);
+        totalTimeBlocked.add(timeSpent);
+        maxTimeBlocked.accumulate(timeSpent);
+        LOG.debug("ASYNC (next): {}: Time blocked for read {} ns", this, timeSpent);
       } catch (Exception e) {
         if (e instanceof InterruptedException) {
           Thread.currentThread().interrupt();
@@ -112,12 +124,14 @@ class AsyncMultiBufferInputStream extends MultiBufferInputStream {
   }
 
   public void close() {
+    LOG.debug("ASYNC Stream: Blocked: {} {} {}", totalTimeBlocked.longValue() / 1000.0,
+      totalCountBlocked.longValue(), maxTimeBlocked.longValue() / 1000.0);
     Future<Void> readResult;
-    while(!readFutures.isEmpty()) {
+    while (!readFutures.isEmpty()) {
       try {
         readResult = readFutures.poll();
         readResult.get();
-        if(!readResult.isDone() && !readResult.isCancelled()){
+        if (!readResult.isDone() && !readResult.isCancelled()) {
           readResult.cancel(true);
         } else {
           readResult.get(1, TimeUnit.MILLISECONDS);
@@ -139,39 +153,29 @@ class AsyncMultiBufferInputStream extends MultiBufferInputStream {
     }
 
     public Void call() {
-      boolean eof = false;
-      try {
-        ByteBuffer buffer;
-        buffer = parent.buffers.get(parent.fetchIndex);
-        if (LOG.isDebugEnabled()) {
-          LOG.debug("ASYNC: Begin disk read ({} bytes) into buffer at index {}  and buffer {}",
-            buffer.remaining(), parent.fetchIndex, buffer);
-        }
-        long start = System.nanoTime();
+      long startTime = System.nanoTime();
+      for (ByteBuffer buffer : parent.buffers) {
         try {
           parent.fileInputStream.readFully(buffer);
-        } catch (EOFException e) {
-          LOG.debug("Hit EOF reading into {} from  {}", buffer, parent.fileInputStream);
-          eof = true;
-        }
-        buffer.flip();
-        long timeSpent = System.nanoTime() - start;
-        if (LOG.isDebugEnabled()) {
-          LOG.debug("ASYNC: {}: Time to read {} bytes from disk :  {} ns", this, buffer.remaining(),
-            timeSpent);
-        }
-        parent.fetchIndex++;
-        if (!eof && parent.fetchIndex < parent.buffers.size()) {
-          try {
-            parent.readFutures.put(
-              parent.threadPool.submit(new ReadPageDataTask(parent)));
-          } catch (InterruptedException e) {
+          buffer.flip();
+          long readCompleted = System.nanoTime();
+          long timeSpent = readCompleted - startTime;
+          LOG.debug("ASYNC Stream: READ - {}", timeSpent / 1000.0);
+          long putStart = System.nanoTime();
+          parent.buffersRead.put(buffer);
+          long putCompleted = System.nanoTime();
+          LOG.debug("ASYNC Stream: FS READ (output) BLOCKED - {}",
+            (putCompleted - putStart) / 1000.0);
+          parent.fetchIndex++;
+        } catch (IOException | InterruptedException e) {
+          if (e instanceof InterruptedException) {
             Thread.currentThread().interrupt();
-            throw new RuntimeException(e);
           }
+          // Let the parent know there was an exception. checkState will throw an
+          // exception if the read task has failed.
+          parent.ioException = e;
+          throw new RuntimeException(e);
         }
-      } catch (IOException e) {
-        throw new RuntimeException(e);
       }
       return null;
     }

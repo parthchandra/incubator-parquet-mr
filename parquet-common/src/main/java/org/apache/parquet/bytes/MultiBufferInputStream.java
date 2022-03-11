@@ -42,6 +42,15 @@ class MultiBufferInputStream extends ByteBufferInputStream {
   private long markLimit = 0;
   private List<ByteBuffer> markBuffers = new ArrayList<>();
 
+  @Override
+  public String toString() {
+    return "MultiBufferInputStream{" +
+      "length=" + length +
+      ", current=" + current +
+      ", position=" + position +
+      '}';
+  }
+
   MultiBufferInputStream(List<ByteBuffer> buffers) {
     this.buffers = buffers;
 
