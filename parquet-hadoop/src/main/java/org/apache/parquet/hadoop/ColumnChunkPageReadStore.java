@@ -28,7 +28,7 @@ import java.util.Optional;
 import java.util.PrimitiveIterator;
 import java.util.Queue;
 
-import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.LinkedBlockingDeque;
 import org.apache.parquet.ParquetRuntimeException;
 import org.apache.parquet.bytes.BytesInput;
 import org.apache.parquet.column.ColumnDescriptor;
@@ -71,7 +71,7 @@ public class ColumnChunkPageReadStore implements PageReadStore, DictionaryPageRe
 
     private final BytesInputDecompressor decompressor;
     private final long valueCount;
-    private final LinkedBlockingQueue<Optional<DataPage>> compressedPages;
+    private final LinkedBlockingDeque<Optional<DataPage>> compressedPages;
     private final DictionaryPage compressedDictionaryPage;
     // null means no page synchronization is required; firstRowIndex will not be returned by the pages
     private final OffsetIndex offsetIndex;
@@ -83,7 +83,7 @@ public class ColumnChunkPageReadStore implements PageReadStore, DictionaryPageRe
     private final byte[] dictionaryPageAAD;
 
     ColumnChunkPageReader(BytesInputDecompressor decompressor,
-        LinkedBlockingQueue<Optional<DataPage>> compressedPages,
+        LinkedBlockingDeque<Optional<DataPage>> compressedPages,
         DictionaryPage compressedDictionaryPage, OffsetIndex offsetIndex, long valueCount,
         long rowCount, BlockCipher.Decryptor blockDecryptor, byte[] fileAAD, int rowGroupOrdinal,
         int columnOrdinal) {
@@ -119,11 +119,19 @@ public class ColumnChunkPageReadStore implements PageReadStore, DictionaryPageRe
     }
 
     public int getPageValueCount() {
-      return compressedPages.element().get().getValueCount();
+      final Optional<DataPage> compressedPage;
+      try {
+        // Since there is no blocking peek, take the head and added it back
+        compressedPage = compressedPages.take();
+      } catch (InterruptedException e) {
+        throw new RuntimeException("Error reading parquet page data.") ;
+      }
+      compressedPages.addFirst(compressedPage);
+      return compressedPage.get().getValueCount();
     }
 
     public void skipPage() {
-      compressedPages.poll();
+      compressedPages.remove();
       pageIndex++;
     }
 

@@ -54,7 +54,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
-import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.LinkedBlockingDeque;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.LongAccumulator;
@@ -1605,7 +1605,7 @@ public class ParquetFileReader implements Closeable {
       throws IOException {
       BytesInputDecompressor decompressor = options.getCodecFactory().getDecompressor(descriptor.metadata.getCodec());
       DictionaryPage dictionaryPage;
-      LinkedBlockingQueue<Optional<DataPage>> pagesInChunk;
+      LinkedBlockingDeque<Optional<DataPage>> pagesInChunk;
       try(
       PageReader pageReader = new PageReader(this, currentBlock, headerBlockDecryptor,
         pageBlockDecryptor, aadPrefix, rowGroupOrdinal, columnOrdinal, decompressor
@@ -1899,7 +1899,7 @@ public class ParquetFileReader implements Closeable {
     int columnOrdinal;
 
     //state
-    LinkedBlockingQueue<Optional<DataPage>> pagesInChunk = new LinkedBlockingQueue<>();
+    LinkedBlockingDeque<Optional<DataPage>> pagesInChunk = new LinkedBlockingDeque<>();
     DictionaryPage dictionaryPage = null;
     int pageIndex = 0;
     long valuesCountReadSoFar = 0;
@@ -1959,7 +1959,7 @@ public class ParquetFileReader implements Closeable {
       return this.dictionaryPage;
     }
 
-    public LinkedBlockingQueue<Optional<DataPage>> getPagesInChunk(){
+    public LinkedBlockingDeque<Optional<DataPage>> getPagesInChunk(){
       return this.pagesInChunk;
     }
 
