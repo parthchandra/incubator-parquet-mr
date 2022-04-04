@@ -82,11 +82,13 @@ public class ColumnChunkPageReadStore implements PageReadStore, DictionaryPageRe
     private final byte[] dataPageAAD;
     private final byte[] dictionaryPageAAD;
 
+    private final ParquetFileReader.PageReader pageReader;
+
     ColumnChunkPageReader(BytesInputDecompressor decompressor,
         LinkedBlockingDeque<Optional<DataPage>> compressedPages,
         DictionaryPage compressedDictionaryPage, OffsetIndex offsetIndex, long valueCount,
         long rowCount, BlockCipher.Decryptor blockDecryptor, byte[] fileAAD, int rowGroupOrdinal,
-        int columnOrdinal) {
+        int columnOrdinal, ParquetFileReader.PageReader pageReader) {
       this.decompressor = decompressor;
       this.compressedPages = compressedPages;
       this.compressedDictionaryPage = compressedDictionaryPage;
@@ -96,6 +98,8 @@ public class ColumnChunkPageReadStore implements PageReadStore, DictionaryPageRe
 
       this.blockDecryptor = blockDecryptor;
 
+      this.pageReader = pageReader;
+
       if (null != blockDecryptor) {
         dataPageAAD = AesCipher.createModuleAAD(fileAAD, ModuleType.DataPage, rowGroupOrdinal, columnOrdinal, 0);
         dictionaryPageAAD = AesCipher.createModuleAAD(fileAAD, ModuleType.DictionaryPage, rowGroupOrdinal, columnOrdinal, -1);
@@ -103,6 +107,11 @@ public class ColumnChunkPageReadStore implements PageReadStore, DictionaryPageRe
         dataPageAAD = null;
         dictionaryPageAAD = null;
       }
+    }
+
+    @Override
+    public void close() throws IOException {
+      this.pageReader.close();
     }
 
     private int getPageOrdinal(int currentPageIndex) {
@@ -293,6 +302,13 @@ public class ColumnChunkPageReadStore implements PageReadStore, DictionaryPageRe
     this.rowRanges = rowRanges;
     this.rowIndexOffset = rowIndexOffset;
     rowCount = rowRanges.rowCount();
+  }
+
+  // Close `ParquetFileReader.PageReader`
+  public void close() throws IOException {
+    for (PageReader pageReader : readers.values()) {
+      pageReader.close();
+    }
   }
 
   @Override

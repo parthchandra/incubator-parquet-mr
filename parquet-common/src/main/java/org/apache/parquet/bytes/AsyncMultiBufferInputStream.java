@@ -66,7 +66,6 @@ class AsyncMultiBufferInputStream extends MultiBufferInputStream {
     }
 
     fetchAll();
-    nextBuffer();
   }
 
   private void checkState() {
@@ -93,7 +92,7 @@ class AsyncMultiBufferInputStream extends MultiBufferInputStream {
   }
 
   @Override
-  protected boolean nextBuffer() {
+  public boolean nextBuffer() {
     checkState();
     // hack: parent constructor can call this method before this class is fully initialized.
     // Just return without doing anything.

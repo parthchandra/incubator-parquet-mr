@@ -96,7 +96,9 @@ public class TestAsyncMultiBufferInputStream extends TestMultiBufferInputStream 
     } catch (FileNotFoundException e) {
       throw new RuntimeException("Failed to initialize test input stream.", e);
     }
-    return new AsyncMultiBufferInputStream(threadPool, seekableInputStream, DATA);
+    AsyncMultiBufferInputStream stream = new AsyncMultiBufferInputStream(threadPool, seekableInputStream, DATA);
+    stream.nextBuffer();
+    return stream;
   }
 
   @Override
