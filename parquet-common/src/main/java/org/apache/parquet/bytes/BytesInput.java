@@ -536,5 +536,11 @@ abstract public class BytesInput {
     public long size() {
       return buffer.remaining();
     }
+
+    @Override
+    public ByteBuffer toByteBuffer() throws IOException {
+      // `BytesInput.toByteBuffer` copies data into additional byte array.
+      return buffer.slice();
+    }
   }
 }
