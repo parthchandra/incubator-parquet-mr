@@ -66,8 +66,8 @@ public class HadoopInputFile implements InputFile {
 
   @Override
   public SeekableInputStream newStream() throws IOException {
-    return HadoopStreams.wrap(fs.open(stat.getPath()));
-  }
+      return HadoopStreams.wrap(fs.open(stat.getPath()));
+    }
 
   @Override
   public String toString() {
