@@ -19,6 +19,7 @@
 package org.apache.parquet.hadoop;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.util.ArrayDeque;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -166,10 +167,33 @@ public class ColumnChunkPageReadStore implements PageReadStore, DictionaryPageRe
         public DataPage visit(DataPageV1 dataPageV1) {
           try {
             BytesInput bytes = dataPageV1.getBytes();
+            ByteBuffer byteBuffer = bytes.toByteBuffer();
+            long compressedSize = bytes.size();
+
             if (null != blockDecryptor) {
-              bytes = BytesInput.from(blockDecryptor.decrypt(bytes.toByteArray(), dataPageAAD));
+              byte[] decrypted = blockDecryptor.decrypt(bytes.toByteArray(), dataPageAAD);
+              compressedSize = decrypted.length;
+              byteBuffer = ByteBuffer.allocateDirect((int) compressedSize);
+              byteBuffer.put(decrypted);
+              byteBuffer.flip();
             }
-            BytesInput decompressed = decompressor.decompress(bytes, dataPageV1.getUncompressedSize());
+
+            if (!byteBuffer.isDirect()) {
+              ByteBuffer directByteBuffer = ByteBuffer.allocateDirect((int) compressedSize);;
+              directByteBuffer.put(byteBuffer);
+              directByteBuffer.flip();
+              byteBuffer = directByteBuffer;
+            }
+
+            // The input/output bytebuffers must be direct for (bytebuffer-based, native) decompressor
+            ByteBuffer decompressedBuffer = ByteBuffer.allocateDirect(dataPageV1.getUncompressedSize());
+            decompressor.decompress(byteBuffer, (int) compressedSize, decompressedBuffer, dataPageV1.getUncompressedSize());
+
+            // HACKY: sometimes we need to do `flip` because the position of output bytebuffer is not reset.
+            if (decompressedBuffer.position() != 0) {
+              decompressedBuffer.flip();
+            }
+            BytesInput decompressed = BytesInput.from(decompressedBuffer);
 
             final DataPageV1 decompressedPage;
             if (offsetIndex == null) {

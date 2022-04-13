@@ -515,7 +515,7 @@ abstract public class BytesInput {
     }
   }
 
-  private static class ByteBufferBytesInput extends BytesInput {
+  public static class ByteBufferBytesInput extends BytesInput {
     private final ByteBuffer buffer;
 
     private ByteBufferBytesInput(ByteBuffer buffer) {
