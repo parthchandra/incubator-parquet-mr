@@ -167,10 +167,12 @@ public class ColumnChunkPageReadStore implements PageReadStore, DictionaryPageRe
         public DataPage visit(DataPageV1 dataPageV1) {
           try {
             BytesInput bytes = dataPageV1.getBytes();
-            ByteBuffer byteBuffer = bytes.toByteBuffer();
             long compressedSize = bytes.size();
 
-            if (null != blockDecryptor) {
+            ByteBuffer byteBuffer;
+            if (blockDecryptor == null) {
+              byteBuffer = bytes.toByteBuffer();
+            } else {
               byte[] decrypted = blockDecryptor.decrypt(bytes.toByteArray(), dataPageAAD);
               compressedSize = decrypted.length;
               byteBuffer = ByteBuffer.allocateDirect((int) compressedSize);
