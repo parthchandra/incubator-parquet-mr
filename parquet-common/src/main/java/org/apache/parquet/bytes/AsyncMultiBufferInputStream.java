@@ -23,7 +23,6 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -64,7 +63,6 @@ class AsyncMultiBufferInputStream extends MultiBufferInputStream {
         LOG.debug("ASYNC: buffer {} ", buf);
       }
     }
-
     fetchAll();
   }
 
@@ -81,14 +79,51 @@ class AsyncMultiBufferInputStream extends MultiBufferInputStream {
 
   private void fetchAll() {
     checkState();
+    submitReadTask(0);
+  }
+
+  private void submitReadTask(int bufferNo) {
+    ByteBuffer buffer = buffers.get(bufferNo);
     try {
-      readFutures.put(
-        threadPool.submit(new ReadPageDataTask(this)));
+      readFutures.put(threadPool.submit(() -> {
+          readOneBuffer(buffer);
+          if (bufferNo < buffers.size() - 1) {
+            submitReadTask(bufferNo + 1);
+          }
+          return null;
+        })
+      );
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
       throw new RuntimeException(e);
     }
-    ;
+  }
+
+  private void readOneBuffer(ByteBuffer buffer) {
+    long startTime = System.nanoTime();
+    try {
+      fileInputStream.readFully(buffer);
+      buffer.flip();
+      long readCompleted = System.nanoTime();
+      long timeSpent = readCompleted - startTime;
+      LOG.debug("ASYNC Stream: READ - {}", timeSpent / 1000.0);
+      long putStart = System.nanoTime();
+      buffersRead.put(buffer);
+      long putCompleted = System.nanoTime();
+      LOG.debug("ASYNC Stream: FS READ (output) BLOCKED - {}",
+        (putCompleted - putStart) / 1000.0);
+      fetchIndex++;
+    } catch (IOException | InterruptedException e) {
+      if (e instanceof InterruptedException) {
+        Thread.currentThread().interrupt();
+      }
+      // Save the exception so that the calling thread can check if something went wrong.
+      // checkState will throw an exception if the read task has failed.
+      synchronized(this) {
+        ioException = e;
+      }
+      throw new RuntimeException(e);
+    }
   }
 
   @Override
@@ -141,43 +176,5 @@ class AsyncMultiBufferInputStream extends MultiBufferInputStream {
     }
     closed = true;
   }
-
-
-  public static class ReadPageDataTask implements Callable<Void> {
-
-    final AsyncMultiBufferInputStream parent;
-
-    ReadPageDataTask(AsyncMultiBufferInputStream parent) {
-      this.parent = parent;
-    }
-
-    public Void call() {
-      long startTime = System.nanoTime();
-      for (ByteBuffer buffer : parent.buffers) {
-        try {
-          parent.fileInputStream.readFully(buffer);
-          buffer.flip();
-          long readCompleted = System.nanoTime();
-          long timeSpent = readCompleted - startTime;
-          LOG.debug("ASYNC Stream: READ - {}", timeSpent / 1000.0);
-          long putStart = System.nanoTime();
-          parent.buffersRead.put(buffer);
-          long putCompleted = System.nanoTime();
-          LOG.debug("ASYNC Stream: FS READ (output) BLOCKED - {}",
-            (putCompleted - putStart) / 1000.0);
-          parent.fetchIndex++;
-        } catch (IOException | InterruptedException e) {
-          if (e instanceof InterruptedException) {
-            Thread.currentThread().interrupt();
-          }
-          // Let the parent know there was an exception. checkState will throw an
-          // exception if the read task has failed.
-          parent.ioException = e;
-          throw new RuntimeException(e);
-        }
-      }
-      return null;
-    }
-  } //PageDataReaderTask
 
 }
