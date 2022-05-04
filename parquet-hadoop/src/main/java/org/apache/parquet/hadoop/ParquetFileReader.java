@@ -1552,7 +1552,7 @@ public class ParquetFileReader implements Closeable {
 
     /**
      * @param descriptor descriptor for the chunk
-     * @param buffers ByteBuffers that contain the chunk
+     * @param stream the input stream to read from
      * @param offsetIndex the offset index for this column; might be null
      */
     public Chunk(ChunkDescriptor descriptor, ByteBufferInputStream stream, OffsetIndex offsetIndex, rowCount) {
@@ -1933,8 +1933,8 @@ public class ParquetFileReader implements Closeable {
       this.columnOrdinal = columnOrdinal;
       this.decompressor = decompressor;
 
-    this.type = getFileMetaData().getSchema()
-      .getType(chunk.descriptor.col.getPath()).asPrimitiveType();
+      this.type = getFileMetaData().getSchema()
+        .getType(chunk.descriptor.col.getPath()).asPrimitiveType();
 
       if (null != headerBlockDecryptor) {
         dataPageHeaderAAD = AesCipher.createModuleAAD(aadPrefix, ModuleType.DataPageHeader,

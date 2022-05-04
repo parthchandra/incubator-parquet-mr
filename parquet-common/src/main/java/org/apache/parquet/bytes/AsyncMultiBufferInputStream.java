@@ -22,7 +22,6 @@ package org.apache.parquet.bytes;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.List;
-import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -42,7 +41,6 @@ class AsyncMultiBufferInputStream extends MultiBufferInputStream {
   int readIndex = 0;
   ExecutorService threadPool;
   LinkedBlockingQueue<Future<Void>> readFutures;
-  BlockingQueue<ByteBuffer> buffersRead;
   boolean closed = false;
   Exception ioException;
 
@@ -56,7 +54,6 @@ class AsyncMultiBufferInputStream extends MultiBufferInputStream {
     this.fileInputStream = fileInputStream;
     this.threadPool = threadPool;
     readFutures = new LinkedBlockingQueue<>(buffers.size());
-    buffersRead = new LinkedBlockingQueue<>(buffers.size());
     if (LOG.isDebugEnabled()) {
       LOG.debug("ASYNC: Begin read into buffers ");
       for (ByteBuffer buf : buffers) {
@@ -108,15 +105,11 @@ class AsyncMultiBufferInputStream extends MultiBufferInputStream {
       long timeSpent = readCompleted - startTime;
       LOG.debug("ASYNC Stream: READ - {}", timeSpent / 1000.0);
       long putStart = System.nanoTime();
-      buffersRead.put(buffer);
       long putCompleted = System.nanoTime();
       LOG.debug("ASYNC Stream: FS READ (output) BLOCKED - {}",
         (putCompleted - putStart) / 1000.0);
       fetchIndex++;
-    } catch (IOException | InterruptedException e) {
-      if (e instanceof InterruptedException) {
-        Thread.currentThread().interrupt();
-      }
+    } catch (IOException e) {
       // Save the exception so that the calling thread can check if something went wrong.
       // checkState will throw an exception if the read task has failed.
       synchronized(this) {
@@ -131,15 +124,15 @@ class AsyncMultiBufferInputStream extends MultiBufferInputStream {
     checkState();
     // hack: parent constructor can call this method before this class is fully initialized.
     // Just return without doing anything.
-    if (buffersRead == null) {
+    if (readFutures == null) {
       return false;
     }
     if (readIndex < buffers.size()) {
       long start = System.nanoTime();
       try {
         LOG.debug("ASYNC (next): Getting next buffer");
-        //noinspection unused
-        ByteBuffer readResult = buffersRead.take();
+        Future<Void> future = readFutures.take();
+        future.get();
         long timeSpent = System.nanoTime() - start;
         totalCountBlocked.add(1);
         totalTimeBlocked.add(timeSpent);
