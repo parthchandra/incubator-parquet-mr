@@ -835,12 +835,25 @@ public class ParquetFileReader implements Closeable {
     this.crc = options.usePageChecksumVerification() ? new CRC32() : null;
   }
 
-  private boolean isAsyncReaderEnabled(){
-    if (options.isAsyncReaderEnabled() ) {
-      if (ioThreadPool != null && processThreadPool != null) {
+  private boolean isAsyncIOReaderEnabled(){
+    if (options.isAsyncIOReaderEnabled() ) {
+      if (ioThreadPool != null) {
         return true;
       } else {
-        LOG.warn("Parquet async IO is configured but the thread pools have not been initialized. Configuration is being ignored");
+        LOG.warn("Parquet async IO is configured but the IO thread pool has not been " +
+          "initialized. Configuration is being ignored");
+      }
+    }
+    return false;
+  }
+
+  private boolean isParallelColumnReaderEnabled(){
+    if (options.isParallelColumnReaderEnabled() ) {
+      if (processThreadPool != null) {
+        return true;
+      } else {
+        LOG.warn("Parallel column reading is configured but the process thread pool has " +
+          "not been initialized. Configuration is being ignored");
       }
     }
     return false;
@@ -991,7 +1004,7 @@ public class ParquetFileReader implements Closeable {
       ColumnDescriptor columnDescriptor = paths.get(pathKey);
       if (columnDescriptor != null) {
         // If async, we need a new stream for every column
-        if (isAsyncReaderEnabled()) {
+        if (isAsyncIOReaderEnabled()) {
           currentParts = null;
         }
         BenchmarkCounter.incrementTotalBytes(mc.getTotalSize());
@@ -1007,7 +1020,7 @@ public class ParquetFileReader implements Closeable {
     // actually read all the chunks
     ChunkListBuilder builder = new ChunkListBuilder(block.getRowCount());
     for (ConsecutivePartList consecutiveChunks : allParts) {
-      if(isAsyncReaderEnabled()) {
+      if(isAsyncIOReaderEnabled()) {
         SeekableInputStream is = file.newStream();
         consecutiveChunks.readAll(is, builder);
         inputStreamList.add(is);
@@ -1119,7 +1132,7 @@ public class ParquetFileReader implements Closeable {
       ColumnDescriptor columnDescriptor = paths.get(pathKey);
       if (columnDescriptor != null) {
         // If async, we need a new stream for every column
-        if (isAsyncReaderEnabled()) {
+        if (isAsyncIOReaderEnabled()) {
           currentParts = null;
         }
         OffsetIndex offsetIndex = ciStore.getOffsetIndex(mc.getPath());
@@ -1143,7 +1156,7 @@ public class ParquetFileReader implements Closeable {
     }
     String mode;
     // actually read all the chunks
-    if (isAsyncReaderEnabled()) {
+    if (isAsyncIOReaderEnabled()) {
         mode = "ASYNC";
       for (ConsecutivePartList consecutiveChunks : allParts) {
         SeekableInputStream is = file.newStream();
@@ -1517,7 +1530,7 @@ public class ParquetFileReader implements Closeable {
       for (Entry<ChunkDescriptor, ChunkData> entry : entries) {
         ChunkDescriptor descriptor = entry.getKey();
         ChunkData data = entry.getValue();
-        if (isAsyncReaderEnabled()) {
+        if (isAsyncIOReaderEnabled()) {
           if (descriptor.equals(lastDescriptor)) {
             // because of a bug, the last chunk might be larger than descriptor.size
             chunks.add(
@@ -1567,7 +1580,7 @@ public class ParquetFileReader implements Closeable {
     }
 
     protected PageHeader readPageHeader(BlockCipher.Decryptor blockDecryptor, byte[] pageHeaderAAD) throws IOException {
-      String mode = (isAsyncReaderEnabled())? "ASYNC":"SYNC";
+      String mode = (isAsyncIOReaderEnabled())? "ASYNC":"SYNC";
       LOG.debug("{} READ HEADER: stream {}", mode, stream);
       return Util.readPageHeader(stream, blockDecryptor, pageHeaderAAD);
     }
@@ -1613,7 +1626,7 @@ public class ParquetFileReader implements Closeable {
       // Read the dictionary page;
       pageReader.readOnePage();
       dictionaryPage = pageReader.getDictionaryPage();
-      if (isAsyncReaderEnabled()) {
+      if (isParallelColumnReaderEnabled()) {
         pageReader.readAllRemainingPagesAsync();
       } else {
         pageReader.readAllRemainingPages();
@@ -1641,13 +1654,9 @@ public class ParquetFileReader implements Closeable {
      * @throws IOException if there is an error while reading from the file stream
      */
     public BytesInput readAsBytesInput(int size) throws IOException {
-      String mode = (isAsyncReaderEnabled())? "ASYNC":"SYNC";
+      String mode = (isAsyncIOReaderEnabled())? "ASYNC":"SYNC";
       LOG.debug("{} READ BYTES INPUT: stream {}", mode, stream);
-      if (isAsyncReaderEnabled()) {
-        return BytesInput.from(stream.sliceBuffers(size));
-      } else {
-        return BytesInput.from(stream.sliceBuffers(size));
-      }
+      return BytesInput.from(stream.sliceBuffers(size));
     }
 
     @Override
@@ -1835,7 +1844,7 @@ public class ParquetFileReader implements Closeable {
       }
 
       ByteBufferInputStream stream;
-      if (!isAsyncReaderEnabled()) {
+      if (!isAsyncIOReaderEnabled()) {
         // pre-read the files into the allocated buffers
         long startTime = System.nanoTime();
         for (ByteBuffer buffer : buffers) {
@@ -1853,7 +1862,7 @@ public class ParquetFileReader implements Closeable {
       // report in a counter the data we just scanned
       BenchmarkCounter.incrementBytesRead(length);
       for (final ChunkDescriptor descriptor : chunks) {
-        if (!isAsyncReaderEnabled()) {
+        if (!isAsyncIOReaderEnabled()) {
           // stream.sliceBuffers is a *blocking* call and assumes that all data has been read
           builder.add(descriptor, stream.sliceBuffers(descriptor.size), is);
           LOG.debug("SYNC: Added to builder -  chunk slice  {} ", descriptor);
@@ -2139,7 +2148,7 @@ public class ParquetFileReader implements Closeable {
           // Do nothing
         }
       }
-      String mode = isAsyncReaderEnabled()?"ASYNC" : "SYNC";
+      String mode = isAsyncIOReaderEnabled()?"ASYNC" : "SYNC";
       LOG.debug("READ PAGE: {}, {}, {}, {}, {}, {}, {}", mode,
         totalTimeReadOnePage.longValue() / 1000.0, totalCountReadOnePage.longValue(),
         maxTimeReadOnePage.longValue() / 1000.0, totalTimeBlockedPagesInChunk.longValue() / 1000.0,
