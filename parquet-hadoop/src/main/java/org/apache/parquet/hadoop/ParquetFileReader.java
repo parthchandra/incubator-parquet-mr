@@ -1004,7 +1004,7 @@ public class ParquetFileReader implements Closeable {
       ColumnDescriptor columnDescriptor = paths.get(pathKey);
       if (columnDescriptor != null) {
         // If async, we need a new stream for every column
-        if (isAsyncIOReaderEnabled()) {
+        if (isAsyncIOReaderEnabled() || isParallelColumnReaderEnabled()) {
           currentParts = null;
         }
         BenchmarkCounter.incrementTotalBytes(mc.getTotalSize());
@@ -1132,7 +1132,7 @@ public class ParquetFileReader implements Closeable {
       ColumnDescriptor columnDescriptor = paths.get(pathKey);
       if (columnDescriptor != null) {
         // If async, we need a new stream for every column
-        if (isAsyncIOReaderEnabled()) {
+        if (isAsyncIOReaderEnabled() || isParallelColumnReaderEnabled()) {
           currentParts = null;
         }
         OffsetIndex offsetIndex = ciStore.getOffsetIndex(mc.getPath());
