@@ -113,7 +113,7 @@ public class HadoopReadOptions extends ParquetReadOptions {
       usePageChecksumVerification(conf.getBoolean(PAGE_VERIFY_CHECKSUM_ENABLED,
         usePageChecksumVerification));
       useBloomFilter(conf.getBoolean(BLOOM_FILTERING_ENABLED, true));
-      enableAsyncIOReader(conf.getBoolean(ENABLE_ASYNC_IO_READER, true));
+      enableAsyncIOReader(conf.getBoolean(ENABLE_ASYNC_IO_READER, false));
       enableParallelColumnReader(conf.getBoolean(ENABLE_PARALLEL_COLUMN_READER, false));
       withCodecFactory(HadoopCodecs.newFactory(conf, 0));
       withRecordFilter(getFilter(conf));
