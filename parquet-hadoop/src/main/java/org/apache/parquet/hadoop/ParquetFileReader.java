@@ -1507,9 +1507,9 @@ public class ParquetFileReader implements Closeable {
     public ChunkListBuilder(long rowCount) {
       this.rowCount = rowCount;
     }
-      
+
     void add(ChunkDescriptor descriptor, ByteBufferInputStream stream, SeekableInputStream f) {
-      map.computeIfAbsent(descriptor, d -> new ChunkData()).data.streams.add(stream);
+      map.computeIfAbsent(descriptor, d -> new ChunkData()).streams.add(stream);
       lastDescriptor = descriptor;
       this.f = f;
     }
@@ -1535,17 +1535,17 @@ public class ParquetFileReader implements Closeable {
             // because of a bug, the last chunk might be larger than descriptor.size
             chunks.add(
               new WorkaroundChunk(lastDescriptor, new SequenceByteBufferInputStream(data.streams),
-                f, data.offsetIndex), rowCount);
+                f, data.offsetIndex, rowCount));
           } else {
             chunks.add(new Chunk(descriptor, new SequenceByteBufferInputStream(data.streams),
-              data.offsetIndex), rowCount);
+              data.offsetIndex, rowCount));
           }
         } else {
           if (descriptor.equals(lastDescriptor)) {
             // because of a bug, the last chunk might be larger than descriptor.size
             chunks.add(new WorkaroundChunk(lastDescriptor, ByteBufferInputStream.wrap(data.buffers), f, data.offsetIndex, rowCount));
           } else {
-            chunks.add(new Chunk(descriptor, ByteBufferInputStream.wrap(data.buffers), data.offsetIndex), rowCount);
+            chunks.add(new Chunk(descriptor, ByteBufferInputStream.wrap(data.buffers), data.offsetIndex, rowCount));
           }
         }
       }
@@ -1568,7 +1568,7 @@ public class ParquetFileReader implements Closeable {
      * @param stream the input stream to read from
      * @param offsetIndex the offset index for this column; might be null
      */
-    public Chunk(ChunkDescriptor descriptor, ByteBufferInputStream stream, OffsetIndex offsetIndex, rowCount) {
+    public Chunk(ChunkDescriptor descriptor, ByteBufferInputStream stream, OffsetIndex offsetIndex, long rowCount) {
       this.descriptor = descriptor;
       this.stream = stream;
       this.offsetIndex = offsetIndex;
