@@ -695,7 +695,7 @@ public class ParquetFileReader implements Closeable {
     return new ParquetFileReader(file, options);
   }
 
-  protected final SeekableInputStream inputStream;
+  protected final SeekableInputStream f;
   // input streams opened in the async mode
   protected final List<SeekableInputStream> inputStreamList = new ArrayList<>();
   private final InputFile file;
@@ -745,7 +745,7 @@ public class ParquetFileReader implements Closeable {
     this.converter = new ParquetMetadataConverter(configuration);
     this.file = HadoopInputFile.fromPath(filePath, configuration);
     this.fileMetaData = fileMetaData;
-    this.inputStream = file.newStream();
+    this.f = file.newStream();
     this.fileDecryptor = fileMetaData.getFileDecryptor();
     if (null == fileDecryptor) {
       this.options = HadoopReadOptions.builder(configuration).build();
@@ -787,7 +787,7 @@ public class ParquetFileReader implements Closeable {
   public ParquetFileReader(Configuration conf, Path file, ParquetMetadata footer) throws IOException {
     this.converter = new ParquetMetadataConverter(conf);
     this.file = HadoopInputFile.fromPath(file, conf);
-    this.inputStream = this.file.newStream();
+    this.f = this.file.newStream();
     this.fileMetaData = footer.getFileMetaData();
     this.fileDecryptor = fileMetaData.getFileDecryptor();
     if (null == fileDecryptor) {
@@ -810,14 +810,14 @@ public class ParquetFileReader implements Closeable {
   public ParquetFileReader(InputFile file, ParquetReadOptions options) throws IOException {
     this.converter = new ParquetMetadataConverter(options);
     this.file = file;
-    this.inputStream = file.newStream();
+    this.f = file.newStream();
     this.options = options;
     try {
-      this.footer = readFooter(file, options, inputStream, converter);
+      this.footer = readFooter(file, options, f, converter);
     } catch (Exception e) {
       // In case that reading footer throws an exception in the constructor, the new stream
       // should be closed. Otherwise, there's no way to close this outside.
-      inputStream.close();
+      f.close();
       throw e;
     }
     this.fileMetaData = footer.getFileMetaData();
@@ -867,7 +867,7 @@ public class ParquetFileReader implements Closeable {
     if (footer == null) {
       try {
         // don't read the row groups because this.blocks is always set
-        this.footer = readFooter(file, options, inputStream, converter);
+        this.footer = readFooter(file, options, f, converter);
       } catch (IOException e) {
         throw new ParquetDecodingException("Unable to read file footer", e);
       }
@@ -949,7 +949,7 @@ public class ParquetFileReader implements Closeable {
   }
 
   public void appendTo(ParquetFileWriter writer) throws IOException {
-    writer.appendRowGroups(inputStream, blocks, true);
+    writer.appendRowGroups(f, blocks, true);
   }
 
   /**
@@ -1025,7 +1025,7 @@ public class ParquetFileReader implements Closeable {
         consecutiveChunks.readAll(is, builder);
         inputStreamList.add(is);
       } else {
-        consecutiveChunks.readAll(inputStream, builder);
+        consecutiveChunks.readAll(f, builder);
       }
     }
     for (Chunk chunk : builder.build()) {
@@ -1168,7 +1168,7 @@ public class ParquetFileReader implements Closeable {
       for (ConsecutivePartList consecutiveChunks : allParts) {
         mode = "SYNC";
         LOG.debug("{}: READING Consecutive chunk: {}", mode, consecutiveChunks);
-        consecutiveChunks.readAll(inputStream, builder);
+        consecutiveChunks.readAll(f, builder);
       }
     }
     for (Chunk chunk : builder.build()) {
@@ -1272,8 +1272,8 @@ public class ParquetFileReader implements Closeable {
     }
 
     // TODO: this should use getDictionaryPageOffset() but it isn't reliable.
-    if (inputStream.getPos() != meta.getStartingPos()) {
-      inputStream.seek(meta.getStartingPos());
+    if (f.getPos() != meta.getStartingPos()) {
+      f.seek(meta.getStartingPos());
     }
 
     boolean encryptedColumn = false;
@@ -1289,11 +1289,11 @@ public class ParquetFileReader implements Closeable {
 
     PageHeader pageHeader;
     if (!encryptedColumn) {
-      pageHeader = Util.readPageHeader(inputStream);
+      pageHeader = Util.readPageHeader(f);
     } else {
       byte[] dictionaryPageHeaderAAD = AesCipher.createModuleAAD(fileDecryptor.getFileAAD(), ModuleType.DictionaryPageHeader,
           meta.getRowGroupOrdinal(), columnDecryptionSetup.getOrdinal(), -1);
-      pageHeader = Util.readPageHeader(inputStream, columnDecryptionSetup.getMetaDataDecryptor(), dictionaryPageHeaderAAD);
+      pageHeader = Util.readPageHeader(f, columnDecryptionSetup.getMetaDataDecryptor(), dictionaryPageHeaderAAD);
       dictionaryPageAAD = AesCipher.createModuleAAD(fileDecryptor.getFileAAD(), ModuleType.DictionaryPage,
           meta.getRowGroupOrdinal(), columnDecryptionSetup.getOrdinal(), -1);
       pageDecryptor = columnDecryptionSetup.getDataDecryptor();
@@ -1303,7 +1303,7 @@ public class ParquetFileReader implements Closeable {
       return null; // TODO: should this complain?
     }
 
-    DictionaryPage compressedPage = readCompressedDictionary(pageHeader, inputStream, pageDecryptor, dictionaryPageAAD);
+    DictionaryPage compressedPage = readCompressedDictionary(pageHeader, f, pageDecryptor, dictionaryPageAAD);
     BytesInputDecompressor decompressor = options.getCodecFactory().getDecompressor(meta.getCodec());
 
     return new DictionaryPage(
@@ -1374,10 +1374,10 @@ public class ParquetFileReader implements Closeable {
     }
 
     // Read Bloom filter data header.
-    inputStream.seek(bloomFilterOffset);
+    f.seek(bloomFilterOffset);
     BloomFilterHeader bloomFilterHeader;
     try {
-      bloomFilterHeader = Util.readBloomFilterHeader(inputStream, bloomFilterDecryptor, bloomFilterHeaderAAD);
+      bloomFilterHeader = Util.readBloomFilterHeader(f, bloomFilterDecryptor, bloomFilterHeaderAAD);
     } catch (IOException e) {
       LOG.warn("read no bloom filter");
       return null;
@@ -1399,9 +1399,9 @@ public class ParquetFileReader implements Closeable {
     byte[] bitset;
     if (null == bloomFilterDecryptor) {
       bitset = new byte[numBytes];
-      inputStream.readFully(bitset);
+      f.readFully(bitset);
     } else {
-      bitset = bloomFilterDecryptor.decrypt(inputStream, bloomFilterBitsetAAD);
+      bitset = bloomFilterDecryptor.decrypt(f, bloomFilterBitsetAAD);
       if (bitset.length != numBytes) {
         throw new ParquetCryptoRuntimeException("Wrong length of decrypted bloom filter bitset");
       }
@@ -1422,7 +1422,7 @@ public class ParquetFileReader implements Closeable {
     if (ref == null) {
       return null;
     }
-    inputStream.seek(ref.getOffset());
+    f.seek(ref.getOffset());
 
     BlockCipher.Decryptor columnIndexDecryptor = null;
     byte[] columnIndexAAD = null;
@@ -1435,7 +1435,7 @@ public class ParquetFileReader implements Closeable {
       }
     }
     return ParquetMetadataConverter.fromParquetColumnIndex(column.getPrimitiveType(),
-        Util.readColumnIndex(inputStream, columnIndexDecryptor, columnIndexAAD));
+        Util.readColumnIndex(f, columnIndexDecryptor, columnIndexAAD));
   }
 
   /**
@@ -1451,7 +1451,7 @@ public class ParquetFileReader implements Closeable {
     if (ref == null) {
       return null;
     }
-    inputStream.seek(ref.getOffset());
+    f.seek(ref.getOffset());
 
     BlockCipher.Decryptor offsetIndexDecryptor = null;
     byte[] offsetIndexAAD = null;
@@ -1463,14 +1463,14 @@ public class ParquetFileReader implements Closeable {
             column.getRowGroupOrdinal(), columnDecryptionSetup.getOrdinal(), -1);
       }
     }
-    return ParquetMetadataConverter.fromParquetOffsetIndex(Util.readOffsetIndex(inputStream, offsetIndexDecryptor, offsetIndexAAD));
+    return ParquetMetadataConverter.fromParquetOffsetIndex(Util.readOffsetIndex(f, offsetIndexDecryptor, offsetIndexAAD));
   }
 
   @Override
   public void close() throws IOException {
     try {
-      if (inputStream != null) {
-        inputStream.close();
+      if (f != null) {
+        f.close();
       }
       if (this.currentRowGroup != null) {
         this.currentRowGroup.close();
@@ -1847,10 +1847,10 @@ public class ParquetFileReader implements Closeable {
       if (!isAsyncIOReaderEnabled()) {
         // pre-read the files into the allocated buffers
         long startTime = System.nanoTime();
-        for (ByteBuffer buffer : buffers) {
+      for (ByteBuffer buffer : buffers) {
           is.readFully(buffer);
-          buffer.flip();
-        }
+        buffer.flip();
+      }
         long timeSpent = System.nanoTime() - startTime;
         LOG.debug("SYNC Stream: READ - {}", timeSpent/1000.0);
         stream = ByteBufferInputStream.wrap(buffers);
