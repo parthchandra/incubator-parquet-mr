@@ -144,6 +144,8 @@ public class ParquetInputFormat<T> extends FileInputFormat<Void, T> {
    */
   public static final String BLOOM_FILTERING_ENABLED = "parquet.filter.bloom.enabled";
 
+  public static final String ENABLE_PARALLEL_IO = "parquet.read.parallel.io.enabled";
+  public static final String IO_THREAD_POOL_SIZE = "parquet.read.parallel.io.threadPoolSize";
   /**
    * key to turn on or off task side metadata loading (default true)
    * if true then metadata is read on the task side and some tasks may finish immediately.

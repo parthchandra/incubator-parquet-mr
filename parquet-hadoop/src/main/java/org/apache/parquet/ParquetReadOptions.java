@@ -44,6 +44,8 @@ public class ParquetReadOptions {
   private static final int ALLOCATION_SIZE_DEFAULT = 8388608; // 8MB
   private static final boolean PAGE_VERIFY_CHECKSUM_ENABLED_DEFAULT = false;
   private static final boolean BLOOM_FILTER_ENABLED_DEFAULT = true;
+  private static final boolean ENABLE_PARALLEL_IO_DEFAULT = false;
+  private static final int IO_THREAD_POOL_SIZE_DEFAULT = 16;
 
   private final boolean useSignedStringMinMax;
   private final boolean useStatsFilter;
@@ -52,6 +54,9 @@ public class ParquetReadOptions {
   private final boolean useColumnIndexFilter;
   private final boolean usePageChecksumVerification;
   private final boolean useBloomFilter;
+  private final boolean enableParallelIO;
+
+  private final int ioThreadPoolSize;
   private final FilterCompat.Filter recordFilter;
   private final ParquetMetadataConverter.MetadataFilter metadataFilter;
   private final CompressionCodecFactory codecFactory;
@@ -67,6 +72,8 @@ public class ParquetReadOptions {
                      boolean useColumnIndexFilter,
                      boolean usePageChecksumVerification,
                      boolean useBloomFilter,
+                     boolean enableParallelIO,
+                     int ioThreadPoolSize,
                      FilterCompat.Filter recordFilter,
                      ParquetMetadataConverter.MetadataFilter metadataFilter,
                      CompressionCodecFactory codecFactory,
@@ -81,6 +88,8 @@ public class ParquetReadOptions {
     this.useColumnIndexFilter = useColumnIndexFilter;
     this.usePageChecksumVerification = usePageChecksumVerification;
     this.useBloomFilter = useBloomFilter;
+    this.enableParallelIO = enableParallelIO;
+    this.ioThreadPoolSize = ioThreadPoolSize;
     this.recordFilter = recordFilter;
     this.metadataFilter = metadataFilter;
     this.codecFactory = codecFactory;
@@ -112,6 +121,14 @@ public class ParquetReadOptions {
 
   public boolean useBloomFilter() {
     return useBloomFilter;
+  }
+
+  public boolean isParallelIOEnabled() {
+    return enableParallelIO;
+  }
+
+  public int getIOThreadPoolSize() {
+    return ioThreadPoolSize;
   }
 
   public boolean usePageChecksumVerification() {
@@ -168,6 +185,8 @@ public class ParquetReadOptions {
     protected boolean useColumnIndexFilter = COLUMN_INDEX_FILTERING_ENABLED_DEFAULT;
     protected boolean usePageChecksumVerification = PAGE_VERIFY_CHECKSUM_ENABLED_DEFAULT;
     protected boolean useBloomFilter = BLOOM_FILTER_ENABLED_DEFAULT;
+    protected boolean enableParallelIO = ENABLE_PARALLEL_IO_DEFAULT;
+    protected int ioThreadPoolSize = IO_THREAD_POOL_SIZE_DEFAULT;
     protected FilterCompat.Filter recordFilter = null;
     protected ParquetMetadataConverter.MetadataFilter metadataFilter = NO_FILTER;
     // the page size parameter isn't used when only using the codec factory to get decompressors
@@ -246,6 +265,16 @@ public class ParquetReadOptions {
       return this;
     }
 
+    public Builder enableParallelIO(boolean enableParallelIO) {
+      this.enableParallelIO = enableParallelIO;
+      return this;
+    }
+
+    public Builder withIoThreadPoolSize(int size) {
+      this.ioThreadPoolSize = size;
+      return this;
+    }
+
     public Builder withRecordFilter(FilterCompat.Filter rowGroupFilter) {
       this.recordFilter = rowGroupFilter;
       return this;
@@ -303,6 +332,8 @@ public class ParquetReadOptions {
       useRecordFilter(options.useRecordFilter);
       withRecordFilter(options.recordFilter);
       withMetadataFilter(options.metadataFilter);
+      enableParallelIO(options.enableParallelIO);
+      withIoThreadPoolSize(options.ioThreadPoolSize);
       withCodecFactory(options.codecFactory);
       withAllocator(options.allocator);
       withPageChecksumVerification(options.usePageChecksumVerification);
@@ -316,8 +347,10 @@ public class ParquetReadOptions {
     public ParquetReadOptions build() {
       return new ParquetReadOptions(
         useSignedStringMinMax, useStatsFilter, useDictionaryFilter, useRecordFilter,
-        useColumnIndexFilter, usePageChecksumVerification, useBloomFilter, recordFilter, metadataFilter,
-        codecFactory, allocator, maxAllocationSize, properties, fileDecryptionProperties);
+        useColumnIndexFilter, usePageChecksumVerification, useBloomFilter, enableParallelIO,
+        ioThreadPoolSize, recordFilter,
+        metadataFilter, codecFactory, allocator, maxAllocationSize, properties,
+        fileDecryptionProperties);
     }
   }
 }

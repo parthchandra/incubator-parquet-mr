@@ -796,6 +796,11 @@ public class ParquetFileReader implements Closeable {
     this.crc = options.usePageChecksumVerification() ? new CRC32() : null;
   }
 
+  private boolean isParallelIOEnabled(){
+    return options.isParallelIOEnabled();
+  }
+
+
   private static <T> List<T> listWithNulls(int size) {
     return new ArrayList<>(Collections.nCopies(size, null));
   }
@@ -950,7 +955,11 @@ public class ParquetFileReader implements Closeable {
     // actually read all the chunks
     ChunkListBuilder builder = new ChunkListBuilder(block.getRowCount());
     for (ConsecutivePartList consecutiveChunks : allParts) {
-      consecutiveChunks.readAll(f, builder);
+      if(isParallelIOEnabled()) {
+        consecutiveChunks.readAllParallel(f, builder);
+      } else {
+        consecutiveChunks.readAll(f, builder);
+      }
     }
     for (Chunk chunk : builder.build()) {
       readChunkPages(chunk, block, rowGroup);
@@ -1073,8 +1082,14 @@ public class ParquetFileReader implements Closeable {
       }
     }
     // actually read all the chunks
-    for (ConsecutivePartList consecutiveChunks : allParts) {
-      consecutiveChunks.readAll(f, builder);
+    if (isParallelIOEnabled()){
+      for (ConsecutivePartList consecutiveChunks : allParts) {
+        consecutiveChunks.readAllParallel(f, builder);
+      }
+    } else {
+      for (ConsecutivePartList consecutiveChunks : allParts) {
+        consecutiveChunks.readAll(f, builder);
+      }
     }
     for (Chunk chunk : builder.build()) {
       readChunkPages(chunk, block, rowGroup);
@@ -1755,14 +1770,7 @@ public class ParquetFileReader implements Closeable {
       length += descriptor.size;
     }
 
-    /**
-     * @param f file to read the chunks from
-     * @param builder used to build chunk list to read the pages for the different columns
-     * @throws IOException if there is an error while reading from the stream
-     */
-    public void readAll(SeekableInputStream f, ChunkListBuilder builder) throws IOException {
-      f.seek(offset);
-
+    private List<ByteBuffer> allocateReadBuffers() {
       int fullAllocations = Math.toIntExact(length / options.getMaxAllocationSize());
       int lastAllocationSize = Math.toIntExact(length % options.getMaxAllocationSize());
 
@@ -1776,6 +1784,20 @@ public class ParquetFileReader implements Closeable {
       if (lastAllocationSize > 0) {
         buffers.add(options.getAllocator().allocate(lastAllocationSize));
       }
+      return buffers;
+
+    }
+
+    /**
+     * @param f file to read the chunks from
+     * @param builder used to build chunk list to read the pages for the different columns
+     * @throws IOException if there is an error while reading from the stream
+     */
+    public void readAll(SeekableInputStream f, ChunkListBuilder builder) throws IOException {
+      List<Chunk> result = new ArrayList<Chunk>(chunks.size());
+      f.seek(offset);
+
+      List<ByteBuffer> buffers = allocateReadBuffers();
 
       for (ByteBuffer buffer : buffers) {
         f.readFully(buffer);
@@ -1787,6 +1809,94 @@ public class ParquetFileReader implements Closeable {
       ByteBufferInputStream stream = ByteBufferInputStream.wrap(buffers);
       for (final ChunkDescriptor descriptor : chunks) {
         builder.add(descriptor, stream.sliceBuffers(descriptor.size), f);
+      }
+    }
+
+    public void readAllParallel(SeekableInputStream is, ChunkListBuilder builder)
+      throws IOException {
+
+      List<ByteBuffer> buffers = allocateReadBuffers();
+
+      int nThreads = options.getIOThreadPoolSize();
+      ExecutorService threadPool = Executors.newFixedThreadPool(nThreads);
+      List<Future<Void>> futures = new ArrayList<>();
+
+      long currentOffset = this.offset;
+      int buffersPerThread = buffers.size() / nThreads;
+      int remaining = buffers.size() % nThreads;
+      // offset in input file each thread seeks to before beginning read
+      long[] offsets = new long[nThreads];
+      // index of buffer where each thread will start writing data
+      int[] bufferIndexes = new int[nThreads];
+      //  number of buffers for each thread to fill
+      int[] numBuffers = new int[nThreads];
+
+      int bufferNum = 0;
+      for (int i = 0; i < nThreads; i++) {
+        int nBuffers = 0;
+        offsets[i] = currentOffset;
+        bufferIndexes[i] = bufferNum;
+        nBuffers = buffersPerThread;
+        for (int j = 0; j < buffersPerThread; j++ ) {
+          currentOffset += buffers.get(bufferNum).capacity();
+          bufferNum++;
+        }
+        if(remaining > 0) {
+          remaining--;
+          currentOffset += buffers.get(bufferNum).capacity();
+          bufferNum++;
+          nBuffers++;
+        }
+        numBuffers[i] = nBuffers;
+      }
+      for (int n = 0; n < nThreads; n++) {
+        int threadIndex = n;
+        long pos = offsets[threadIndex];
+        int bufferIndex = bufferIndexes[threadIndex];
+        int nBuffers = numBuffers[threadIndex];
+        if(nBuffers == 0) {
+          continue;
+        }
+        futures.add(
+        threadPool.submit(() -> {
+          try (SeekableInputStream inputStream = file.newStream()) {
+            inputStream.seek(pos);
+            long curPos = pos;
+            for (int i = 0; i < nBuffers; i++) {
+              int bufNo = bufferIndex + i;
+              if (bufNo >= buffers.size()) {
+                break;
+              }
+              ByteBuffer buffer = buffers.get(bufNo);
+              LOG.debug("Thread: {} Offset: {} Buffer: {} Size: {}", threadIndex, curPos, bufNo,
+                buffer.capacity());
+              curPos+=buffer.capacity();
+              inputStream.readFully(buffer);
+              buffer.flip();
+            } // for
+          } // try
+          return null;
+        }));
+      }
+
+      for (Future<Void> future : futures) {
+        try {
+          future.get();
+        } catch (InterruptedException | ExecutionException e) {
+          throw new RuntimeException(e);
+        }
+      }
+      threadPool.shutdownNow();
+      // For the workaround chunk provide an input stream that has the updated current offset
+      is.seek(currentOffset);
+
+      ByteBufferInputStream stream;
+      stream = ByteBufferInputStream.wrap(buffers);
+      // report in a counter the data we just scanned
+      BenchmarkCounter.incrementBytesRead(length);
+      for (int i = 0; i < chunks.size(); i++) {
+        ChunkDescriptor descriptor = chunks.get(i);
+        builder.add(descriptor, stream.sliceBuffers(descriptor.size), is);
       }
     }
 
