@@ -45,6 +45,9 @@ public class ParquetReadOptions {
   private static final boolean PAGE_VERIFY_CHECKSUM_ENABLED_DEFAULT = false;
   private static final boolean BLOOM_FILTER_ENABLED_DEFAULT = true;
   private static final boolean ENABLE_PARALLEL_IO_DEFAULT = false;
+  private static final boolean IO_MERGE_RANGES_DEFAULT = true;
+  private static final int IO_MERGE_RANGES_DELTA_DEFAULT = 1<< 23; // 8 MB
+
   private static final int IO_THREAD_POOL_SIZE_DEFAULT = 16;
 
   private final boolean useSignedStringMinMax;
@@ -57,6 +60,8 @@ public class ParquetReadOptions {
   private final boolean enableParallelIO;
 
   private final int ioThreadPoolSize;
+  private final boolean ioMergeRanges;
+  private final int ioMergeRangesDelta;
   private final FilterCompat.Filter recordFilter;
   private final ParquetMetadataConverter.MetadataFilter metadataFilter;
   private final CompressionCodecFactory codecFactory;
@@ -74,6 +79,8 @@ public class ParquetReadOptions {
                      boolean useBloomFilter,
                      boolean enableParallelIO,
                      int ioThreadPoolSize,
+                     boolean ioMergeRanges,
+                     int ioMergeRangesDelta,
                      FilterCompat.Filter recordFilter,
                      ParquetMetadataConverter.MetadataFilter metadataFilter,
                      CompressionCodecFactory codecFactory,
@@ -90,6 +97,8 @@ public class ParquetReadOptions {
     this.useBloomFilter = useBloomFilter;
     this.enableParallelIO = enableParallelIO;
     this.ioThreadPoolSize = ioThreadPoolSize;
+    this.ioMergeRanges = ioMergeRanges;
+    this.ioMergeRangesDelta = ioMergeRangesDelta;
     this.recordFilter = recordFilter;
     this.metadataFilter = metadataFilter;
     this.codecFactory = codecFactory;
@@ -129,6 +138,14 @@ public class ParquetReadOptions {
 
   public int getIOThreadPoolSize() {
     return ioThreadPoolSize;
+  }
+
+  public boolean isIOMergeRangesEnabled() {
+    return ioMergeRanges;
+  }
+
+  public int getIOMergeRangesDelta() {
+    return ioMergeRangesDelta;
   }
 
   public boolean usePageChecksumVerification() {
@@ -187,6 +204,8 @@ public class ParquetReadOptions {
     protected boolean useBloomFilter = BLOOM_FILTER_ENABLED_DEFAULT;
     protected boolean enableParallelIO = ENABLE_PARALLEL_IO_DEFAULT;
     protected int ioThreadPoolSize = IO_THREAD_POOL_SIZE_DEFAULT;
+    protected boolean ioMergeRanges = IO_MERGE_RANGES_DEFAULT;
+    protected int ioMergeRangesDelta = IO_MERGE_RANGES_DELTA_DEFAULT;
     protected FilterCompat.Filter recordFilter = null;
     protected ParquetMetadataConverter.MetadataFilter metadataFilter = NO_FILTER;
     // the page size parameter isn't used when only using the codec factory to get decompressors
@@ -275,6 +294,16 @@ public class ParquetReadOptions {
       return this;
     }
 
+    public Builder enableIOMergeRanges(boolean enableIOMergeRanges) {
+      this.ioMergeRanges = enableIOMergeRanges;
+      return this;
+    }
+
+    public Builder withIOMergeRangesDelta(int ioMergeRangesDelta) {
+      this.ioMergeRangesDelta = ioMergeRangesDelta;
+      return this;
+    }
+
     public Builder withRecordFilter(FilterCompat.Filter rowGroupFilter) {
       this.recordFilter = rowGroupFilter;
       return this;
@@ -334,6 +363,8 @@ public class ParquetReadOptions {
       withMetadataFilter(options.metadataFilter);
       enableParallelIO(options.enableParallelIO);
       withIoThreadPoolSize(options.ioThreadPoolSize);
+      enableIOMergeRanges(options.ioMergeRanges);
+      withIOMergeRangesDelta(options.ioMergeRangesDelta);
       withCodecFactory(options.codecFactory);
       withAllocator(options.allocator);
       withPageChecksumVerification(options.usePageChecksumVerification);
@@ -347,10 +378,10 @@ public class ParquetReadOptions {
     public ParquetReadOptions build() {
       return new ParquetReadOptions(
         useSignedStringMinMax, useStatsFilter, useDictionaryFilter, useRecordFilter,
-        useColumnIndexFilter, usePageChecksumVerification, useBloomFilter, enableParallelIO,
-        ioThreadPoolSize, recordFilter,
-        metadataFilter, codecFactory, allocator, maxAllocationSize, properties,
-        fileDecryptionProperties);
+        useColumnIndexFilter, usePageChecksumVerification, useBloomFilter,
+        enableParallelIO, ioThreadPoolSize,
+        ioMergeRanges, ioMergeRangesDelta, recordFilter, metadataFilter, codecFactory, allocator,
+        maxAllocationSize, properties, fileDecryptionProperties);
     }
   }
 }

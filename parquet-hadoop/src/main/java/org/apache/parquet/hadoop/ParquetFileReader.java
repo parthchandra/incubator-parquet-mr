@@ -945,9 +945,20 @@ public class ParquetFileReader implements Closeable {
         BenchmarkCounter.incrementTotalBytes(mc.getTotalSize());
         long startingPos = mc.getStartingPos();
         // first part or not consecutive => new list
-        if (currentParts == null || currentParts.endPos() != startingPos) {
+        boolean mergeRanges = options.isIOMergeRangesEnabled();
+        int mergeRangeDelta = options.getIOMergeRangesDelta();
+
+        if (currentParts == null
+        || (!mergeRanges && currentParts.endPos() != startingPos)
+        || ( mergeRanges && startingPos - currentParts.endPos() > mergeRangeDelta) ) {
           currentParts = new ConsecutivePartList(startingPos);
           allParts.add(currentParts);
+        }
+        // if we are in a consecutive part list and there is a gap in between the parts,
+        // we treat the gap as a skippable chunk
+        long delta = startingPos - currentParts.endPos();
+        if(mergeRanges && delta > 0 && delta <= mergeRangeDelta) {
+            currentParts.addSkippableChunk(startingPos, startingPos - currentParts.endPos() );
         }
         currentParts.addChunk(new ChunkDescriptor(columnDescriptor, mc, startingPos, mc.getTotalSize()));
       }
@@ -955,9 +966,9 @@ public class ParquetFileReader implements Closeable {
     // actually read all the chunks
     ChunkListBuilder builder = new ChunkListBuilder(block.getRowCount());
     for (ConsecutivePartList consecutiveChunks : allParts) {
-      if(isParallelIOEnabled()) {
+        if (isParallelIOEnabled()) {
         consecutiveChunks.readAllParallel(f, builder);
-      } else {
+        } else {
         consecutiveChunks.readAll(f, builder);
       }
     }
@@ -1224,13 +1235,13 @@ public class ParquetFileReader implements Closeable {
     }
 
     DictionaryPage compressedPage = readCompressedDictionary(pageHeader, f, pageDecryptor, dictionaryPageAAD);
-    BytesInputDecompressor decompressor = options.getCodecFactory().getDecompressor(meta.getCodec());
+      BytesInputDecompressor decompressor = options.getCodecFactory().getDecompressor(meta.getCodec());
 
     return new DictionaryPage(
         decompressor.decompress(compressedPage.getBytes(), compressedPage.getUncompressedSize()),
         compressedPage.getDictionarySize(),
         compressedPage.getEncoding());
-  }
+    }
 
   private DictionaryPage readCompressedDictionary(
       PageHeader pageHeader, SeekableInputStream fin,
@@ -1435,7 +1446,7 @@ public class ParquetFileReader implements Closeable {
         if (descriptor.equals(lastDescriptor)) {
           // because of a bug, the last chunk might be larger than descriptor.size
           chunks.add(new WorkaroundChunk(lastDescriptor, data.buffers, f, data.offsetIndex, rowCount));
-        } else {
+          } else {
           chunks.add(new Chunk(descriptor, data.buffers, data.offsetIndex, rowCount));
         }
       }
@@ -1770,6 +1781,12 @@ public class ParquetFileReader implements Closeable {
       length += descriptor.size;
     }
 
+    public void addSkippableChunk(long fileOffset, long size) {
+      ChunkDescriptor skipChunk = new ChunkDescriptor(null, null, fileOffset, size);
+      chunks.add(skipChunk);
+      length += size;
+    }
+
     private List<ByteBuffer> allocateReadBuffers() {
       int fullAllocations = Math.toIntExact(length / options.getMaxAllocationSize());
       int lastAllocationSize = Math.toIntExact(length % options.getMaxAllocationSize());
@@ -1793,24 +1810,28 @@ public class ParquetFileReader implements Closeable {
      * @param builder used to build chunk list to read the pages for the different columns
      * @throws IOException if there is an error while reading from the stream
      */
-    public void readAll(SeekableInputStream f, ChunkListBuilder builder) throws IOException {
-      List<Chunk> result = new ArrayList<Chunk>(chunks.size());
-      f.seek(offset);
-
-      List<ByteBuffer> buffers = allocateReadBuffers();
-
-      for (ByteBuffer buffer : buffers) {
-        f.readFully(buffer);
-        buffer.flip();
+      public void readAll(SeekableInputStream f, ChunkListBuilder builder) throws IOException {
+          List<Chunk> result = new ArrayList<Chunk>(chunks.size());
+          f.seek(offset);
+          
+          List<ByteBuffer> buffers = allocateReadBuffers();
+          
+          for (ByteBuffer buffer : buffers) {
+              f.readFully(buffer);
+              buffer.flip();
+          }
+          
+          // report in a counter the data we just scanned
+          BenchmarkCounter.incrementBytesRead(length);
+          ByteBufferInputStream stream = ByteBufferInputStream.wrap(buffers);
+          for (final ChunkDescriptor descriptor : chunks) {
+            if(descriptor.col != null) {
+              builder.add(descriptor, stream.sliceBuffers(descriptor.size), f);
+            } else {
+              stream.skipFully(descriptor.size);
+            }
+          }
       }
-
-      // report in a counter the data we just scanned
-      BenchmarkCounter.incrementBytesRead(length);
-      ByteBufferInputStream stream = ByteBufferInputStream.wrap(buffers);
-      for (final ChunkDescriptor descriptor : chunks) {
-        builder.add(descriptor, stream.sliceBuffers(descriptor.size), f);
-      }
-    }
 
     public void readAllParallel(SeekableInputStream is, ChunkListBuilder builder)
       throws IOException {
@@ -1858,25 +1879,25 @@ public class ParquetFileReader implements Closeable {
           continue;
         }
         futures.add(
-        threadPool.submit(() -> {
+          threadPool.submit(() -> {
           try (SeekableInputStream inputStream = file.newStream()) {
-            inputStream.seek(pos);
-            long curPos = pos;
-            for (int i = 0; i < nBuffers; i++) {
-              int bufNo = bufferIndex + i;
-              if (bufNo >= buffers.size()) {
-                break;
-              }
-              ByteBuffer buffer = buffers.get(bufNo);
-              LOG.debug("Thread: {} Offset: {} Buffer: {} Size: {}", threadIndex, curPos, bufNo,
-                buffer.capacity());
-              curPos+=buffer.capacity();
-              inputStream.readFully(buffer);
-              buffer.flip();
-            } // for
-          } // try
-          return null;
-        }));
+              inputStream.seek(pos);
+              long curPos = pos;
+              for (int i = 0; i < nBuffers; i++) {
+                int bufNo = bufferIndex + i;
+                if (bufNo >= buffers.size()) {
+                  break;
+                }
+                ByteBuffer buffer = buffers.get(bufNo);
+                LOG.debug("Thread: {} Offset: {} Buffer: {} Size: {}", threadIndex, curPos, bufNo,
+                  buffer.capacity());
+                curPos += buffer.capacity();
+                inputStream.readFully(buffer);
+                buffer.flip();
+              } // for
+            } // try
+            return null;
+          }));
       }
 
       for (Future<Void> future : futures) {
@@ -1896,7 +1917,11 @@ public class ParquetFileReader implements Closeable {
       BenchmarkCounter.incrementBytesRead(length);
       for (int i = 0; i < chunks.size(); i++) {
         ChunkDescriptor descriptor = chunks.get(i);
-        builder.add(descriptor, stream.sliceBuffers(descriptor.size), is);
+        if(descriptor.col != null) {
+          builder.add(descriptor, stream.sliceBuffers(descriptor.size), is);
+        } else {
+          stream.skipFully(descriptor.size);
+        }
       }
     }
 
